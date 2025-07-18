@@ -2,6 +2,8 @@
 
 Build a website builder platform where users can create and deploy websites with custom domains using [Cloudflare Workers for Platforms](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/).
 
+One-click deploy not ready _yet_... use instructions below to deploy  
+
 [![Deploy to Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/dinasaur404/platform-template)
 
 ## Setup
