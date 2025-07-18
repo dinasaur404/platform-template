@@ -105,6 +105,21 @@ npx wrangler dev --remote
 
 Visit `/admin` to see all projects and debug issues.
 
+### ⚠️ Security: Protect Admin Access
+
+**IMPORTANT**: The admin page exposes sensitive database and infrastructure information. For production deployments, protect it with [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-apps/):
+
+1. **Create Access Application**:
+   - Go to Cloudflare Zero Trust dashboard → Access → Applications
+   - Create Self-hosted application
+   - Application domain: `yourdomain.com/admin*`
+
+2. **Configure Access Policy**:
+   - Policy name: `Admin Access`
+   - Action: `Allow`
+   - Include rule: `Emails` → Add your email address
+
+This ensures only authorized users can access admin functionality while keeping the rest of your platform public.
 ## Troubleshooting
 
 **"Dispatch namespace not found"**: Check your API token has `Workers Scripts:Edit` permission and the namespace exists
