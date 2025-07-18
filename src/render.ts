@@ -3,8 +3,28 @@
 
 import { ResourceValues } from './types';
 
-function ResourceValueToString(value: ResourceValues) {
-  return value?.toString() ?? 'null';
+function ResourceValueToString(value: ResourceValues, columnName?: string) {
+  if (value == null) return 'null';
+  
+  const stringValue = value.toString();
+  
+  // Special handling for script_content column
+  if (columnName === 'script_content' && stringValue.length > 100) {
+    const truncated = stringValue.substring(0, 100) + '...';
+    return `<div class="script-preview" title="${escapeHtml(stringValue)}">${escapeHtml(truncated)}</div>`;
+  }
+  
+  // HTML escape all content to prevent rendering issues
+  return escapeHtml(stringValue);
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 export function BuildTable(name: string, dataRows: Record<string, string | number | boolean | null>[] | undefined): string {
@@ -14,11 +34,12 @@ export function BuildTable(name: string, dataRows: Record<string, string | numbe
   }
   const columns = Object.keys(dataRows[0]);
   const makeColumnsHead = (values: ResourceValues[]) => values.map((value) => `<th>${ResourceValueToString(value)}</th>`).join('');
-  const makeColumnsData = (values: ResourceValues[]) => values.map((value) => `<td>${ResourceValueToString(value)}</td>`).join('');
+  const makeColumnsData = (row: Record<string, string | number | boolean | null>) => 
+    columns.map((columnName) => `<td>${ResourceValueToString(row[columnName], columnName)}</td>`).join('');
   const makeRow = (value: ResourceValues) => `<tr>${ResourceValueToString(value)}</tr>`;
   const table = `<table class="dataTable">${[
     makeRow(makeColumnsHead(columns)),
-    dataRows.map((value) => makeRow(makeColumnsData(Object.values(value)))).join(''),
+    dataRows.map((row) => `<tr>${makeColumnsData(row)}</tr>`).join(''),
   ].join('')}</table>`;
   return container(table);
 }
@@ -139,12 +160,13 @@ hr.solid {
 
 .dataContainer {
   padding: 20px;
-  max-width: 800px;
+  max-width: 100%;
   background-color: var(--secondary-background);
   border: 2px solid var(--border);
   border-radius: 5px;
   box-shadow: var(--shadow);
   margin-bottom: 20px;
+  overflow-x: auto;
 }
 
 .dataContainer h3 {
@@ -168,6 +190,24 @@ hr.solid {
   border-bottom: 2px solid var(--border);
   padding: 12px;
   text-align: left;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.script-preview {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+  background-color: var(--background);
+  padding: 8px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  cursor: help;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dataTable td:last-child, .dataTable th:last-child {
