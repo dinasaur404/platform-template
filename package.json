@@ -16,7 +16,10 @@
   },
   "scripts": {
     "start": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "build": "npm run setup:namespace && npm run db:init",
+    "deploy": "npm run setup:namespace && npm run db:init && wrangler deploy",
+    "setup:namespace": "node scripts/setup-namespace.js",
+    "db:init": "wrangler d1 migrations apply DB --remote || echo 'No migrations to apply'",
     "lint": "npx eslint ./src",
     "format": "npx prettier --write '**/*.{ts,js,cjs,json}'"
   },
