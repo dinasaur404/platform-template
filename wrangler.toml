@@ -3,11 +3,12 @@ main = "src/index.ts"
 compatibility_date = "2024-04-03"
 compatibility_flags = ["nodejs_compat"]
 
-# Route patterns for custom domain support
-# Using */* wildcard pattern (recommended by Cloudflare) for maximum compatibility
-routes = [
-  { pattern = "*/*", zone_name = "yourdomain.com" }
-]
+# Routes for custom domain support 
+# routes = [
+#  { pattern = "*/*", zone_name = "yourdomain.com" }
+# ]
+
+workers_dev = true
 
 # Smart Placement
 placement = { mode = "smart" }
