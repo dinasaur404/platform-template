@@ -15,9 +15,10 @@
     "wrangler": "^4.25.0"
   },
   "scripts": {
-    "build": "npm run setup:namespace",
-    "deploy": "npm run setup:namespace && wrangler deploy",
-    "setup:namespace": "node scripts/setup-namespace.js"
+    "dev": "npm run setup && wrangler dev --remote",
+    "build": "npm run setup",
+    "deploy": "npm run setup && wrangler deploy",
+    "setup": "node scripts/setup.js"
   },
   "dependencies": {
     "cloudflare": "^4.5.0",

@@ -14,11 +14,73 @@ import { handleDispatchError, withDb } from './router';
 import { renderPage, BuildTable, BuildWebsitePage } from './render';
 import { Project } from './types';
 import { createCustomHostname, getCustomHostnameStatus } from './cloudflare-api';
+import { D1QB } from 'workers-qb';
 
 const app = new Hono<{ Bindings: Env }>();
 
+// Auto-initialization flag - tracks if DB has been initialized
+let isInitialized = false;
+
+/**
+ * Automatically initialize database schema on first request
+ */
+async function autoInitializeDatabase(db: D1QB): Promise<void> {
+  if (isInitialized) {
+    return; // Already initialized in this worker instance
+  }
+  
+  try {
+    console.log('🔍 Checking database initialization...');
+    
+    // Check if projects table exists by trying to query it
+    const tableCheck = await db.fetchOne({
+      tableName: 'sqlite_master',
+      fields: 'name',
+      where: {
+        conditions: 'type = ? AND name = ?',
+        params: ['table', 'projects']
+      }
+    });
+    
+    if (!tableCheck.results) {
+      console.log('🗄️  Creating database schema...');
+      
+      // Create projects table
+      await db.createTable({
+        tableName: 'projects',
+        schema: 'id TEXT PRIMARY KEY, name TEXT NOT NULL, subdomain TEXT UNIQUE NOT NULL, custom_hostname TEXT, script_content TEXT NOT NULL, created_on TEXT NOT NULL, modified_on TEXT NOT NULL',
+        ifNotExists: true
+      });
+      
+      console.log('✅ Database schema created successfully');
+    } else {
+      console.log('✅ Database schema already exists');
+    }
+    
+    isInitialized = true;
+    
+  } catch (error) {
+    console.error('❌ Database initialization error:', error);
+    // Don't throw - let the app continue, it might work anyway
+    // Set flag to true to avoid repeated attempts
+    isInitialized = true;
+  }
+}
+
+// Enhanced withDb middleware that includes auto-initialization
+const withDbAndInit = async (c: any, next: any) => {
+  // First apply the original withDb middleware
+  await withDb(c, async () => {
+    // Auto-initialize database on first request
+    if (!isInitialized && c.var.db) {
+      await autoInitializeDatabase(c.var.db);
+    }
+    await next();
+  });
+};
+
 // Project routing middleware - handles both subdomains and custom hostnames
-app.use('*', withDb, async (c, next) => {
+app.use('*', withDbAndInit, async (c, next) => {
   const customDomain = c.env.CUSTOM_DOMAIN;
   const builderSubdomain = c.env.BUILDER_SUBDOMAIN || 'build';
   const url = new URL(c.req.url);
@@ -118,7 +180,7 @@ app.get('/', (c) => {
 /*
  * Admin page - For debugging/management (hidden)
  */
-app.get('/admin', withDb, async (c) => {
+app.get('/admin', withDbAndInit, async (c) => {
   let body = `
     <hr class="solid"><br/>
     <div>
@@ -133,7 +195,7 @@ app.get('/admin', withDb, async (c) => {
   try {
     body += BuildTable('projects', await FetchTable(c.var.db, 'projects'));
   } catch (e) {
-    body += '<div>No DB data. Do you need to <a href="/init">initialize</a>?</div>';
+    body += '<div>No DB data. Database will auto-initialize on first project creation.</div>';
   }
 
   /*
@@ -152,22 +214,19 @@ app.get('/admin', withDb, async (c) => {
 });
 
 /*
- * Initialize example data
+ * Initialize example data (now optional since auto-init handles schema)
  */
-app.get('/init', withDb, async (c) => {
+app.get('/init', withDbAndInit, async (c) => {
   const scripts = await GetScriptsInDispatchNamespace(c.env);
   await Promise.all(scripts.map(async (script) => DeleteScriptInDispatchNamespace(c.env, script.id)));
   await Initialize(c.var.db);
   return Response.redirect(c.req.url.replace('/init', ''));
 });
 
-
-
-
 /*
  * Create a new project
  */ 
-app.post('/projects', withDb, async (c) => {
+app.post('/projects', withDbAndInit, async (c) => {
   try {
     const { name, subdomain, script_content, custom_hostname } = await c.req.json();
     
@@ -231,7 +290,7 @@ app.post('/projects', withDb, async (c) => {
 /*
  * Check custom domain status
  */
-app.get('/projects/:subdomain/custom-domain-status', withDb, async (c) => {
+app.get('/projects/:subdomain/custom-domain-status', withDbAndInit, async (c) => {
   try {
     const subdomain = c.req.param('subdomain');
     
@@ -271,6 +330,5 @@ app.get('/projects/:subdomain/custom-domain-status', withDb, async (c) => {
     return c.text(`Internal server error: ${errorMessage}`, 500);
   }
 });
-
 
 export default app;

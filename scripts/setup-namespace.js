@@ -32,40 +32,30 @@ function execCommand(command) {
 }
 
 function getWorkerNameFromConfig() {
-  // Look for configuration files in order of preference
-  const configFiles = [
-    'wrangler.jsonc',
-    'wrangler.json', 
-    'wrangler.toml'
-  ];
+  const configFiles = ['wrangler.jsonc', 'wrangler.json', 'wrangler.toml'];
   
   for (const configFile of configFiles) {
     const configPath = path.join(process.cwd(), configFile);
     
     if (fs.existsSync(configPath)) {
-      log('blue', `📄 Found configuration file: ${configFile}`);
+      log('blue', `📄 Found configuration: ${configFile}`);
       
       try {
         const configContent = fs.readFileSync(configPath, 'utf8');
         let workerName;
         
         if (configFile.endsWith('.toml')) {
-          // Parse TOML format
           const nameMatch = configContent.match(/^name\s*=\s*['"](.*?)['"]$/m);
           workerName = nameMatch ? nameMatch[1] : null;
         } else {
-          // Parse JSON/JSONC format
-          // Remove comments from JSONC
           const cleanedContent = configContent.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
           const config = JSON.parse(cleanedContent);
           workerName = config.name;
         }
         
         if (workerName) {
-          log('green', `✅ Worker name found: '${workerName}'`);
+          log('green', `✅ Worker name: '${workerName}'`);
           return workerName;
-        } else {
-          log('yellow', `⚠️  No 'name' field found in ${configFile}`);
         }
       } catch (error) {
         log('yellow', `⚠️  Could not parse ${configFile}: ${error.message}`);
@@ -76,59 +66,43 @@ function getWorkerNameFromConfig() {
   return null;
 }
 
-function getNamespaceFromWorkerName(workerName) {
-  // Use the worker name as the namespace name
-  // You could also add a suffix/prefix if needed, e.g.:
-  // return `${workerName}-dispatch`;
-  return workerName;
-}
-
 function main() {
-  log('blue', '🚀 Setting up dispatch namespace for Workers for Platforms...\n');
+  log('blue', '🚀 Setting up dispatch namespace...\n');
   
   try {
     // Get worker name from configuration
     const workerName = getWorkerNameFromConfig();
     
     if (!workerName) {
-      log('red', '❌ Could not determine worker name from configuration files');
-      log('yellow', '   Make sure you have a wrangler.toml, wrangler.json, or wrangler.jsonc file with a "name" field');
+      log('red', '❌ Could not find worker name in configuration');
+      log('yellow', '   Make sure your wrangler config has a "name" field');
       process.exit(1);
     }
     
-    // Generate namespace name from worker name
-    const namespaceName = getNamespaceFromWorkerName(workerName);
-    log('blue', `🎯 Target namespace: '${namespaceName}'\n`);
-    
-    // Create the dispatch namespace
-    // In Deploy to Cloudflare environment, Wrangler has authenticated access automatically
-    log('yellow', `📦 Creating dispatch namespace '${namespaceName}'...`);
-    const createResult = execCommand(`npx wrangler dispatch-namespace create ${namespaceName}`);
+    // Create dispatch namespace using worker name
+    log('yellow', `📦 Creating dispatch namespace '${workerName}'...`);
+    const createResult = execCommand(`npx wrangler dispatch-namespace create ${workerName}`);
     
     if (createResult.success) {
-      log('green', `✅ Successfully created dispatch namespace '${namespaceName}'`);
+      log('green', `✅ Successfully created dispatch namespace '${workerName}'`);
     } else if (
       createResult.output.includes('already exists') || 
       createResult.output.includes('namespace with that name already exists') ||
       createResult.output.includes('A namespace with this name already exists')
     ) {
-      log('green', `✅ Dispatch namespace '${namespaceName}' already exists`);
+      log('green', `✅ Dispatch namespace '${workerName}' already exists`);
     } else {
-      // If namespace creation fails, log the error but don't fail the build
-      // The deploy might still work if namespace was created through other means
       log('yellow', `⚠️  Namespace creation had issues: ${createResult.error}`);
-      log('yellow', '   Continuing with deployment - namespace might already exist');
+      log('yellow', '   Continuing - deployment flow will handle this');
     }
     
     log('green', '\n✅ Namespace setup completed!');
-    log('blue', `📋 Namespace '${namespaceName}' is ready for Worker '${workerName}'`);
-    log('blue', '📋 Next: Database will be initialized and Worker will be deployed');
+    log('blue', '📋 Database will be auto-created during deployment');
+    log('blue', '📋 App will initialize automatically on first request');
     
   } catch (error) {
     log('red', `\n❌ Setup failed: ${error.message}`);
-    // Don't exit with error code - let the deployment continue
-    // as resources might be provisioned automatically
-    log('yellow', '⚠️  Continuing with deployment despite setup issues');
+    log('yellow', '⚠️  Continuing - deployment flow will handle resources');
   }
 }
 
@@ -137,4 +111,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { getWorkerNameFromConfig, getNamespaceFromWorkerName };
+module.exports = { getWorkerNameFromConfig };
