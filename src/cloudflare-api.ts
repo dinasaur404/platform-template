@@ -2,16 +2,11 @@
 import type { Env } from './env';
 
 function getAuthHeaders(env: Env): Record<string, string> {
-  // Support both API Token (Bearer) and Global API Key (X-Auth-Key + X-Auth-Email)
-  if (env.CLOUDFLARE_API_TOKEN) {
+  // Use DISPATCH_NAMESPACE_API_TOKEN for all Cloudflare API calls
+  // This token is auto-created by setup script with required permissions
+  if (env.DISPATCH_NAMESPACE_API_TOKEN) {
     return {
-      'Authorization': `Bearer ${env.CLOUDFLARE_API_TOKEN}`,
-      'Content-Type': 'application/json',
-    };
-  } else if (env.CLOUDFLARE_API_KEY && env.CLOUDFLARE_API_EMAIL) {
-    return {
-      'X-Auth-Key': env.CLOUDFLARE_API_KEY,
-      'X-Auth-Email': env.CLOUDFLARE_API_EMAIL,
+      'Authorization': `Bearer ${env.DISPATCH_NAMESPACE_API_TOKEN}`,
       'Content-Type': 'application/json',
     };
   }
@@ -19,7 +14,7 @@ function getAuthHeaders(env: Env): Record<string, string> {
 }
 
 function isApiConfigured(env: Env): boolean {
-  return !!(env.CLOUDFLARE_ZONE_ID && (env.CLOUDFLARE_API_TOKEN || (env.CLOUDFLARE_API_KEY && env.CLOUDFLARE_API_EMAIL)));
+  return !!(env.CLOUDFLARE_ZONE_ID && env.DISPATCH_NAMESPACE_API_TOKEN);
 }
 
 export async function createCustomHostname(env: Env, hostname: string): Promise<boolean> {

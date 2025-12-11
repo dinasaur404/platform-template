@@ -310,10 +310,8 @@ class SetupManager {
     // Create dispatch namespace
     await this.ensureDispatchNamespace();
 
-    // Create specialized API token if needed
-    if (this.config.authMethod === 'token') {
-      await this.ensureDispatchToken();
-    }
+    // Always create a permanent API token for runtime use
+    await this.ensureDispatchToken();
   }
 
   async checkWorkersForPlatformsAccess() {
@@ -391,23 +389,24 @@ class SetupManager {
   }
 
   async ensureDispatchToken() {
-    // Check if we need to create a specialized token
-    log('blue', '🔐 Checking API token permissions...');
+    log('blue', '🔐 Creating permanent API token for runtime operations...');
 
     try {
-      // Test if current token can manage dispatch namespaces
-      const testResponse = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${this.config.accountId}/workers/dispatch/namespaces`,
-        { headers: this.getAuthHeaders() }
-      );
+      // If using existing token, test if it has permissions
+      if (this.config.authMethod === 'token') {
+        const testResponse = await fetch(
+          `https://api.cloudflare.com/client/v4/accounts/${this.config.accountId}/workers/dispatch/namespaces`,
+          { headers: this.getAuthHeaders() }
+        );
 
-      if (testResponse.ok) {
-        log('green', '✅ Current token has dispatch namespace permissions');
-        this.config.dispatchToken = this.config.apiToken;
-        return;
+        if (testResponse.ok) {
+          log('green', '✅ Current token has dispatch namespace permissions');
+          this.config.dispatchToken = this.config.apiToken;
+          return;
+        }
       }
 
-      // Token doesn't have permissions, try to create one
+      // Create a new permanent token (works with both API Token and Global API Key)
       log('blue', '🔐 Creating specialized dispatch namespace token...');
 
       const tokenResponse = await fetch('https://api.cloudflare.com/client/v4/user/tokens', {
@@ -432,18 +431,25 @@ class SetupManager {
       const tokenData = await tokenResponse.json();
 
       if (tokenResponse.ok && tokenData.success && tokenData.result?.value) {
-        log('green', '✅ Created specialized API token');
+        log('green', '✅ Created permanent API token');
         log('yellow', `   Token ID: ${tokenData.result.id}`);
         this.config.dispatchToken = tokenData.result.value;
         this.config.createdToken = true;
       } else {
-        log('yellow', `⚠️  Could not create specialized token: ${tokenData.errors?.[0]?.message}`);
-        log('yellow', '   Using existing token - may need manual permission setup');
-        this.config.dispatchToken = this.config.apiToken;
+        log('yellow', `⚠️  Could not create token: ${tokenData.errors?.[0]?.message}`);
+        if (this.config.authMethod === 'token') {
+          log('yellow', '   Using existing token - may need manual permission setup');
+          this.config.dispatchToken = this.config.apiToken;
+        } else {
+          log('red', '❌ Cannot create API token - Global API Key cannot be used at runtime');
+          log('yellow', '   Please use an API Token instead of Global API Key');
+        }
       }
     } catch (error) {
       log('yellow', `⚠️  Token setup error: ${error.message}`);
-      this.config.dispatchToken = this.config.apiToken;
+      if (this.config.authMethod === 'token') {
+        this.config.dispatchToken = this.config.apiToken;
+      }
     }
   }
 
@@ -459,18 +465,11 @@ class SetupManager {
 ACCOUNT_ID="${this.config.accountId}"
 `;
 
-    if (this.config.authMethod === 'token') {
-      content += `
-# API Token for dispatch namespace operations
+    // Always use API token format - the setup script will create a permanent token
+    content += `
+# API Token for dispatch namespace operations (auto-created with correct permissions)
 DISPATCH_NAMESPACE_API_TOKEN="${this.config.dispatchToken || this.config.apiToken}"
 `;
-    } else {
-      content += `
-# Global API Key Authentication
-CLOUDFLARE_API_KEY="${this.config.apiKey}"
-CLOUDFLARE_API_EMAIL="${this.config.apiEmail}"
-`;
-    }
 
     if (this.config.customDomain && this.config.customDomain !== '') {
       content += `

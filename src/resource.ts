@@ -6,15 +6,9 @@ import { Env } from './env';
 const BaseURI = (env: Env) => `https://api.cloudflare.com/client/v4/accounts/${env.ACCOUNT_ID}/workers`;
 const ScriptsURI = (env: Env) => `${BaseURI(env)}/dispatch/namespaces/${env.DISPATCH_NAMESPACE_NAME}/scripts`;
 const MakeHeaders = (env: Env): Record<string, string> => {
-  // Support both API Token (Bearer) and Global API Key (X-Auth-Key + X-Auth-Email)
   if (env.DISPATCH_NAMESPACE_API_TOKEN) {
     return {
       'Authorization': `Bearer ${env.DISPATCH_NAMESPACE_API_TOKEN}`,
-    };
-  } else if (env.CLOUDFLARE_API_KEY && env.CLOUDFLARE_API_EMAIL) {
-    return {
-      'X-Auth-Key': env.CLOUDFLARE_API_KEY,
-      'X-Auth-Email': env.CLOUDFLARE_API_EMAIL,
     };
   }
   return {};

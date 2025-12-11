@@ -17,24 +17,17 @@ Build your own website hosting platform using [Cloudflare Workers for Platforms]
 
 ## Quick Start
 
-Click the **Deploy to Cloudflare** button above. You'll be prompted for the following:
+Click the **Deploy to Cloudflare** button above. Everything is auto-configured!
 
-### Required Secrets
+### Optional: Custom Domain
 
-| Secret | Where to Find It |
-|--------|------------------|
-| `CLOUDFLARE_API_KEY` | [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) → **Global API Key** → View |
-| `CLOUDFLARE_API_EMAIL` | The email you use to log into Cloudflare |
-| `ACCOUNT_ID` | [dash.cloudflare.com](https://dash.cloudflare.com) → Select account → URL shows `https://dash.cloudflare.com/<ACCOUNT_ID>` |
-| `DISPATCH_NAMESPACE_API_TOKEN` | [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) → Create Token → Use "Edit Cloudflare Workers" template |
+If you want to use your own domain instead of `*.workers.dev`, you can optionally provide:
 
-### Optional Settings (for Custom Domains)
+| Variable | Description |
+|----------|-------------|
+| `CUSTOM_DOMAIN` | Your root domain (e.g., `platform.com`) |
 
-| Variable | Where to Find It |
-|----------|------------------|
-| `CUSTOM_DOMAIN` | Your root domain (e.g., `platform.com`). Leave empty to use workers.dev subdomain |
-| `CLOUDFLARE_ZONE_ID` | Zone ID for custom hostname management. Cloudflare Dashboard → Select your domain → **Overview** → right sidebar → **Zone ID** |
-| `FALLBACK_ORIGIN` | Subdomain for customer CNAMEs (e.g., `my.platform.com`) - see Custom Domain Setup |
+All other configuration (API tokens, account ID, zone ID) is automatically detected and provisioned during deployment.
 
 ---
 

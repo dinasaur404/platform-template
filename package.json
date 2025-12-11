@@ -22,12 +22,5 @@
   "dependencies": {
     "hono": "^4.2.1",
     "workers-qb": "^0.1.1"
-  },
-  "cloudflare": {
-    "bindings": {
-      "CUSTOM_DOMAIN": {
-        "description": "(Optional) Your root domain (e.g., platform.com). Leave empty to use workers.dev"
-      }
-    }
   }
 }
