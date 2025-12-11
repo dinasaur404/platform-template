@@ -34,7 +34,7 @@ Click the **Deploy to Cloudflare** button above. You'll be prompted for the foll
 |----------|------------------|
 | `CUSTOM_DOMAIN` | Your root domain (e.g., `myplatform.com`). Leave empty to use `*.workers.dev` only |
 | `CLOUDFLARE_ZONE_ID` | Cloudflare Dashboard → Select your domain → **Overview** page → right sidebar → **Zone ID** |
-| `FALLBACK_ORIGIN` | Create a DNS record like `proxy.yourdomain.com` pointing to `192.0.2.1` |
+| `FALLBACK_ORIGIN` | A subdomain for custom hostname CNAMEs (e.g., `proxy.yourdomain.com`) |
 
 ---
 
@@ -103,7 +103,7 @@ In your Cloudflare DNS settings:
 |------|------|--------|-------|
 | CNAME | `build` | `your-worker.workers.dev` | Proxied |
 | CNAME | `*` | `your-worker.workers.dev` | Proxied |
-| A | `proxy` | `192.0.2.1` | Proxied |
+| CNAME | `proxy` | `your-worker.workers.dev` | Proxied |
 
 ### 3. Redeploy
 
