@@ -32,8 +32,8 @@ Click the **Deploy to Cloudflare** button above. You'll be prompted for the foll
 
 | Variable | Where to Find It |
 |----------|------------------|
-| `CUSTOM_DOMAIN` | Your root domain (e.g., `myplatform.com`). Leave empty to use `*.workers.dev` only |
-| `CLOUDFLARE_ZONE_ID` | Cloudflare Dashboard → Select your domain → **Overview** page → right sidebar → **Zone ID** |
+| `CUSTOM_DOMAIN` | Your root domain (e.g., `platform.com`). Leave empty to use workers.dev subdomain |
+| `CLOUDFLARE_ZONE_ID` | Zone ID for custom hostname management. Cloudflare Dashboard → Select your domain → **Overview** → right sidebar → **Zone ID** |
 | `FALLBACK_ORIGIN` | Subdomain for customer CNAMEs (e.g., `my.platform.com`) - see Custom Domain Setup |
 
 ---
@@ -99,12 +99,12 @@ workers_dev = false
 
 ### 2. Add DNS Records
 
-In your Cloudflare DNS settings:
+In your Cloudflare DNS settings for `platform.com`:
 
-| Type | Name | Target | Proxy |
-|------|------|--------|-------|
-| A | `*` | `192.0.2.1` | Proxied |
-| A | `my` | `192.0.2.1` | Proxied |
+| Type | Name | Content | Result | Proxy |
+|------|------|---------|--------|-------|
+| A | `*` | `192.0.2.1` | `*.platform.com` | Proxied |
+| A | `my` | `192.0.2.1` | `my.platform.com` | Proxied |
 
 > **Note:** The root domain (`platform.com`) is automatically configured when you add a custom domain to your Worker in the Cloudflare dashboard. The `192.0.2.1` is a dummy IP - Cloudflare's proxy handles the actual routing.
 
