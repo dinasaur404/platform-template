@@ -31,19 +31,5 @@ database_id = "placeholder-will-be-auto-provisioned"
 # Dispatch namespace name - must match the namespace above
 DISPATCH_NAMESPACE_NAME = "workers-platform-template"
 
-# Custom domain configuration (optional)
-# Set CUSTOM_DOMAIN to your root domain (e.g., "platform.com")
-# Leave empty ("") to use workers.dev subdomain
-CUSTOM_DOMAIN = ""
-
-# Fallback origin for custom hostnames - where customer CNAMEs should point
-# (e.g., "my.platform.com")
-FALLBACK_ORIGIN = ""
-
-# Cloudflare Zone ID - required for custom hostname API calls
-# Find this in your Cloudflare dashboard under the domain's Overview page
-CLOUDFLARE_ZONE_ID = ""
-
-# Account ID is automatically detected from the deployment context
-# Only set this if you need to override it
-# ACCOUNT_ID = ""
+# Other variables (CUSTOM_DOMAIN, FALLBACK_ORIGIN, CLOUDFLARE_ZONE_ID, ACCOUNT_ID, 
+# DISPATCH_NAMESPACE_API_TOKEN) are auto-configured by the setup script and stored as secrets
