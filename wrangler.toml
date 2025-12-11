@@ -31,9 +31,5 @@ database_id = "placeholder-will-be-auto-provisioned"
 # Dispatch namespace name - must match the namespace above
 DISPATCH_NAMESPACE_NAME = "workers-platform-template"
 
-# Optional: Your custom domain (e.g., "myplatform.com")
-# Leave empty to use workers.dev subdomain
-CUSTOM_DOMAIN = ""
-
-# Other variables (FALLBACK_ORIGIN, CLOUDFLARE_ZONE_ID, ACCOUNT_ID, 
-# DISPATCH_NAMESPACE_API_TOKEN) are auto-configured by the setup script
+# CUSTOM_DOMAIN, FALLBACK_ORIGIN, CLOUDFLARE_ZONE_ID, ACCOUNT_ID, and
+# DISPATCH_NAMESPACE_API_TOKEN are auto-configured by the setup script
