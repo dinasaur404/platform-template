@@ -32,15 +32,12 @@ database_id = "placeholder-will-be-auto-provisioned"
 DISPATCH_NAMESPACE_NAME = "workers-platform-template"
 
 # Custom domain configuration (optional)
-# Set CUSTOM_DOMAIN to your root domain to enable custom domain features
-# Leave empty ("") to use workers.dev subdomain only
+# Set CUSTOM_DOMAIN to your root domain (e.g., "platform.com")
+# Leave empty ("") to use workers.dev subdomain
 CUSTOM_DOMAIN = ""
 
-# Subdomain where the builder UI is hosted (e.g., "build" for build.yourdomain.com)
-BUILDER_SUBDOMAIN = "build"
-
-# Fallback origin for custom hostnames - where user CNAMEs should point
-# This should be a subdomain you control (e.g., "proxy.yourdomain.com")
+# Fallback origin for custom hostnames - where customer CNAMEs should point
+# (e.g., "my.platform.com")
 FALLBACK_ORIGIN = ""
 
 # Cloudflare Zone ID - required for custom hostname API calls

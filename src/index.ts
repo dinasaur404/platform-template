@@ -75,7 +75,6 @@ const withDbAndInit = async (c: any, next: any) => {
 // Project routing middleware - handles both subdomains and custom hostnames
 app.use('*', withDbAndInit, async (c, next) => {
   const customDomain = c.env.CUSTOM_DOMAIN;
-  const builderSubdomain = c.env.BUILDER_SUBDOMAIN || 'build';
   const url = new URL(c.req.url);
   const host = url.hostname;
   const path = url.pathname;
@@ -83,15 +82,15 @@ app.use('*', withDbAndInit, async (c, next) => {
   let project: any = null;
 
   if (customDomain) {
+    // If visiting the root domain, serve the builder UI
+    if (host === customDomain) {
+      await next();
+      return;
+    }
+    
     // Check if this is a subdomain of our custom domain
     if (host.endsWith(`.${customDomain}`)) {
       const subdomain = host.replace(`.${customDomain}`, '');
-      
-      // Skip if this is the builder subdomain
-      if (subdomain === builderSubdomain) {
-        await next();
-        return;
-      }
       
       // Look up project by subdomain
       project = await GetProjectBySubdomain(c.var.db, subdomain);

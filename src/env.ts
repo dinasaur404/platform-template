@@ -13,7 +13,6 @@ export type Env = {
   ACCOUNT_ID: string;
   DISPATCH_NAMESPACE_API_TOKEN: string;
   CUSTOM_DOMAIN?: string;
-  BUILDER_SUBDOMAIN?: string;
   CLOUDFLARE_ZONE_ID?: string;
   CLOUDFLARE_API_TOKEN?: string;
   CLOUDFLARE_API_KEY?: string;
