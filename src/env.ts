@@ -10,13 +10,15 @@ export type Env = {
   dispatcher: Dispatcher;
   DB: object;
   DISPATCH_NAMESPACE_NAME: string;
-  ACCOUNT_ID: string;
-  DISPATCH_NAMESPACE_API_TOKEN: string;
+  // These are auto-provisioned by the setup script - don't need user input
+  ACCOUNT_ID?: string;
+  DISPATCH_NAMESPACE_API_TOKEN?: string;
   CUSTOM_DOMAIN?: string;
   CLOUDFLARE_ZONE_ID?: string;
   CLOUDFLARE_API_TOKEN?: string;
   CLOUDFLARE_API_KEY?: string;
   CLOUDFLARE_API_EMAIL?: string;
+  FALLBACK_ORIGIN?: string;
 }
 
 interface Dispatcher {
