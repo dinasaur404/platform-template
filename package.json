@@ -7,13 +7,9 @@
     "node": ">=18"
   },
   "devDependencies": {
-    "@cloudflare/d1": "^1.4.1",
     "@cloudflare/workers-types": "^4.20240329.0",
-    "@typescript-eslint/eslint-plugin": "^5.37.0",
-    "@typescript-eslint/parser": "^5.37.0",
-    "eslint": "^8.23.1",
-    "typescript": "^4.8.3",
-    "wrangler": "^4.54.0"
+    "typescript": "^5.0.0",
+    "wrangler": "^3.99.0"
   },
   "scripts": {
     "dev": "npm run setup && wrangler dev --remote",
@@ -22,27 +18,31 @@
     "setup": "node scripts/setup.js"
   },
   "dependencies": {
-    "@cloudflare/kumo": "^0.3.0",
-    "cloudflare": "^4.5.0",
     "hono": "^4.2.1",
     "workers-qb": "^0.1.1"
   },
   "cloudflare": {
     "bindings": {
       "CLOUDFLARE_API_KEY": {
-        "description": "Your Cloudflare Global API Key. Find it at [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) under 'Global API Key'."
+        "description": "Your Cloudflare Global API Key. Find at dash.cloudflare.com/profile/api-tokens under 'Global API Key'."
       },
       "CLOUDFLARE_API_EMAIL": {
         "description": "The email address associated with your Cloudflare account."
       },
+      "ACCOUNT_ID": {
+        "description": "Your Cloudflare Account ID. Find in the URL: dash.cloudflare.com/<ACCOUNT_ID>"
+      },
+      "DISPATCH_NAMESPACE_API_TOKEN": {
+        "description": "API Token with Workers Scripts Edit permission. Create at dash.cloudflare.com/profile/api-tokens using 'Edit Cloudflare Workers' template."
+      },
       "CUSTOM_DOMAIN": {
-        "description": "Your root domain for hosting sites (e.g., `yourdomain.com`). Leave empty to use workers.dev subdomain only."
+        "description": "(Optional) Your root domain for hosting sites (e.g., platform.com). Leave empty to use workers.dev subdomain."
       },
       "CLOUDFLARE_ZONE_ID": {
-        "description": "The Zone ID for your custom domain. Find it in the Cloudflare dashboard under your domain's **Overview** page in the right sidebar."
+        "description": "(Optional) Zone ID for custom hostname management. Find in Cloudflare dashboard under domain Overview page."
       },
       "FALLBACK_ORIGIN": {
-        "description": "The hostname where user CNAMEs should point (e.g., `proxy.yourdomain.com`). Required for custom domain support."
+        "description": "(Optional) Hostname for customer CNAMEs (e.g., my.platform.com). Required for custom domain support."
       }
     }
   }
