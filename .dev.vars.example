@@ -1,0 +1,29 @@
+# Workers for Platforms Template - Environment Secrets
+# Copy this file to .dev.vars and fill in your values
+# These are secrets and should NOT be committed to git
+
+# ============================================
+# REQUIRED - Cloudflare API Credentials
+# ============================================
+
+# Your Cloudflare Global API Key
+# Find it: dash.cloudflare.com/profile/api-tokens → Global API Key → View
+CLOUDFLARE_API_KEY=your-global-api-key-here
+
+# Your Cloudflare account email
+CLOUDFLARE_API_EMAIL=your-email@example.com
+
+# Your Cloudflare Account ID
+# Find it: dash.cloudflare.com → URL shows https://dash.cloudflare.com/<ACCOUNT_ID>
+ACCOUNT_ID=your-account-id-here
+
+# API Token for dispatch namespace operations
+# Create at: dash.cloudflare.com/profile/api-tokens → Create Token
+# Use template: "Edit Cloudflare Workers"
+DISPATCH_NAMESPACE_API_TOKEN=your-api-token-here
+
+# ============================================
+# OPTIONAL - Alternative API Token Auth
+# ============================================
+# Instead of Global API Key + Email, you can use a single API Token:
+# CLOUDFLARE_API_TOKEN=your-api-token-with-custom-hostname-permissions

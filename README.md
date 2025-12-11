@@ -1,137 +1,159 @@
 # Workers for Platforms Template
 
-Build a website builder platform where users can create and deploy websites with custom domains using [Cloudflare Workers for Platforms](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/).
+Build your own website hosting platform using [Cloudflare Workers for Platforms](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/). Users can create and deploy websites through a simple web interface.
 
-One-click deploy not ready _yet_... use instructions below to deploy  
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/dinasaur404/platform-template)
 
-[![Deploy to Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/dinasaur404/platform-template)
+## What You Get
 
-## Setup
+- **Website Builder UI** - Web interface for creating and deploying sites
+- **Static Site Hosting** - Drag & drop HTML/CSS/JS files
+- **Custom Worker Code** - Write dynamic sites with Workers
+- **Subdomain Routing** - Each site gets `sitename.yourdomain.com`
+- **Custom Domains** - Users can connect their own domains with SSL
+- **Admin Dashboard** - Manage all sites at `/admin`
 
-### 1. Clone and Install
+---
+
+## Quick Start
+
+Click the **Deploy to Cloudflare** button above. You'll be prompted for the following:
+
+### Required Secrets
+
+| Secret | Where to Find It |
+|--------|------------------|
+| `CLOUDFLARE_API_KEY` | [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) → **Global API Key** → View |
+| `CLOUDFLARE_API_EMAIL` | The email you use to log into Cloudflare |
+| `ACCOUNT_ID` | [dash.cloudflare.com](https://dash.cloudflare.com) → Select account → URL shows `https://dash.cloudflare.com/<ACCOUNT_ID>` |
+| `DISPATCH_NAMESPACE_API_TOKEN` | [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) → Create Token → Use "Edit Cloudflare Workers" template |
+
+### Optional Settings (for Custom Domains)
+
+| Variable | Where to Find It |
+|----------|------------------|
+| `CUSTOM_DOMAIN` | Your root domain (e.g., `myplatform.com`). Leave empty to use `*.workers.dev` only |
+| `CLOUDFLARE_ZONE_ID` | Cloudflare Dashboard → Select your domain → **Overview** page → right sidebar → **Zone ID** |
+| `FALLBACK_ORIGIN` | Create a DNS record like `proxy.yourdomain.com` pointing to `192.0.2.1` |
+
+---
+
+## How It Works
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Your Platform (this template)                              │
+├─────────────────────────────────────────────────────────────┤
+│  build.yoursite.com        → Website Builder UI             │
+│  build.yoursite.com/admin  → Admin Dashboard                │
+├─────────────────────────────────────────────────────────────┤
+│  User Sites (Workers for Platforms)                         │
+│  ├── site1.yoursite.com    → User's deployed Worker         │
+│  ├── site2.yoursite.com    → User's deployed Worker         │
+│  └── custom.userdomain.com → Custom domain with SSL         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Manual Deployment
+
 ```bash
-git clone https://github.com/dinasaur404/workers-platform-template.git
-cd workers-platform-template
+# Clone
+git clone https://github.com/dinasaur404/platform-template.git
+cd platform-template
+
+# Install
 npm install
+
+# Configure secrets
+cp .dev.vars.example .dev.vars
+# Edit .dev.vars with your values
+
+# Deploy
+npm run deploy
 ```
 
-### 2. Create Database
-Create a [D1 database](https://developers.cloudflare.com/d1/) to store project data:
-```bash
-npx wrangler d1 create workers-platform-template
-```
-Copy the database ID and update `wrangler.toml`:
-```toml
-database_id = "your-database-id-here"
-```
+---
 
-### 3. Create Dispatch Namespace
-Create a [dispatch namespace](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/get-started/configuration/#2-create-a-dispatch-namespace) for deploying user scripts:
-```bash
-npx wrangler dispatch-namespace create workers-platform-template
-```
+## Custom Domain Setup
 
-### 4. Configure Basic Settings
-Update these values in `wrangler.toml`:
-```toml
-[vars]
-DISPATCH_NAMESPACE_NAME = "workers-platform-template"
-ACCOUNT_ID = "your-account-id"  # From Cloudflare dashboard sidebar
-```
+To use your own domain instead of `*.workers.dev`:
 
-### 5. Create API Tokens
+### 1. Update `wrangler.toml`
 
-**Dispatch Token** — Used to deploy user websites to your [Workers for Platforms namespace](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/get-started/configuration/#3-create-an-api-token):
-1. Go to [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens)
-2. Create token with permissions: `Account:Workers Scripts:Edit`
-3. Set as secret: `echo "your-token" | wrangler secret put DISPATCH_NAMESPACE_API_TOKEN`
-
-**Custom Hostnames Token** (Optional) — Used to automatically setup SSL for user domains via [Custom Hostnames](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/):
-1. Create token with permissions: `Zone:Custom Hostnames:Edit` + `Zone:Zone:Read`
-2. Set as secret: `echo "your-token" | wrangler secret put CLOUDFLARE_API_TOKEN`
-
-### 6. Deploy
-```bash
-npx wrangler deploy
-```
-
-### 7. Initialize
-Visit your worker URL and add `/init` to setup the database:
-```
-https://your-worker.workers.dev/init
-```
-
-## Custom Domain Setup (Optional)
-
-If you want branded URLs like `build.yoursite.com` instead of `your-worker.workers.dev`:
-
-### 1. Configure Domain
-Add to `wrangler.toml`:
 ```toml
 [vars]
 CUSTOM_DOMAIN = "yoursite.com"
-CLOUDFLARE_ZONE_ID = "your-zone-id"  # From domain overview page
+CLOUDFLARE_ZONE_ID = "your-zone-id-here"
+FALLBACK_ORIGIN = "proxy.yoursite.com"
 
 routes = [
   { pattern = "*/*", zone_name = "yoursite.com" }
 ]
+
+workers_dev = false
 ```
 
 ### 2. Add DNS Records
-- `build.yoursite.com` → Your worker
-- `*.yoursite.com` → Your worker (for user subdomains)
 
-Your users can then connect their own domains which will automatically get SSL certificates via [Cloudflare for SaaS Custom Hostnames](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/).
+In your Cloudflare DNS settings:
 
-## Local Development
+| Type | Name | Target | Proxy |
+|------|------|--------|-------|
+| CNAME | `build` | `your-worker.workers.dev` | Proxied |
+| CNAME | `*` | `your-worker.workers.dev` | Proxied |
+| A | `proxy` | `192.0.2.1` | Proxied |
 
-Create `.dev.vars` file:
+### 3. Redeploy
+
 ```bash
-DISPATCH_NAMESPACE_API_TOKEN=your-dispatch-token
-CLOUDFLARE_API_TOKEN=your-cloudflare-token
+npm run deploy
 ```
-
-Run locally:
-```bash
-npx wrangler dev --remote
-```
-
-## How It Works
-
-- **Builder**: Visit the root URL to create websites
-- **User Sites**: Each project gets a subdomain like `projectname.yoursite.com`
-- **Custom Domains**: Users can connect their own domains with automatic SSL via Custom Hostnames
-- **Multi-tenant**: Each user's code runs in isolation using [Workers for Platforms](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/)
-
-## Admin
-
-Visit `/admin` to see all projects and debug issues.
-
-### ⚠️ Security: Protect Admin Access
-
-**IMPORTANT**: The admin page exposes sensitive database and infrastructure information. For production deployments, protect it with [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-apps/):
-
-1. **Create Access Application**:
-   - Go to Cloudflare Zero Trust dashboard → Access → Applications
-   - Create Self-hosted application
-   - Application domain: `yourdomain.com/admin*`
-
-2. **Configure Access Policy**:
-   - Policy name: `Admin Access`
-   - Action: `Allow`
-   - Include rule: `Emails` → Add your email address
-
-This ensures only authorized users can access admin functionality while keeping the rest of your platform public.
-## Troubleshooting
-
-**"Dispatch namespace not found"**: Check your API token has `Workers Scripts:Edit` permission and the namespace exists
-
-**"Custom domain not working"**: Verify your [Custom Hostnames API token](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/security/api-tokens/) permissions and DNS records
-
-**Database errors**: Visit `/init` to reset the database
-
-**Debug logs**: Run `npx wrangler tail` to see real-time logs
 
 ---
 
-This template is production-ready but add rate limiting and input validation for public use.
+## Security
+
+The admin page (`/admin`) shows all projects. Protect it with [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-apps/):
+
+1. Go to **Zero Trust** → **Access** → **Applications**
+2. Add application for `yourdomain.com/admin*`
+3. Configure authentication policy
+
+---
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| "Dispatch namespace not found" | Enable Workers for Platforms: [dash.cloudflare.com/?to=/:account/workers-for-platforms](https://dash.cloudflare.com/?to=/:account/workers-for-platforms) |
+| "Custom domain not working" | Check Zone ID and DNS records are correct |
+| "404 on deployed sites" | Ensure uploaded files include `index.html` at the root |
+| Database errors | Visit `/admin` to check status, or `/init` to reset |
+
+**View logs:**
+```bash
+npx wrangler tail
+```
+
+---
+
+## Prerequisites
+
+- **Cloudflare Account** with Workers for Platforms enabled
+  - [Purchase Workers for Platforms](https://dash.cloudflare.com/?to=/:account/workers-for-platforms) or contact sales (Enterprise)
+- **Node.js 18+**
+
+---
+
+## Learn More
+
+- [Workers for Platforms Docs](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/)
+- [Custom Hostnames (Cloudflare for SaaS)](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/)
+- [Workers Assets](https://developers.cloudflare.com/workers/static-assets/)
+- [D1 Database](https://developers.cloudflare.com/d1/)
+
+## License
+
+Apache-2.0

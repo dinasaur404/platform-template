@@ -1,6 +1,7 @@
 {
-  "name": "workers-for-platforms-example-project",
+  "name": "workers-for-platforms-template",
   "version": "1.0.0",
+  "description": "A template for building website hosting platforms using Cloudflare Workers for Platforms. Deploy static sites and custom Workers code through a simple web interface.",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=18"
@@ -12,7 +13,7 @@
     "@typescript-eslint/parser": "^5.37.0",
     "eslint": "^8.23.1",
     "typescript": "^4.8.3",
-    "wrangler": "^4.25.0"
+    "wrangler": "^4.54.0"
   },
   "scripts": {
     "dev": "npm run setup && wrangler dev --remote",
@@ -21,8 +22,28 @@
     "setup": "node scripts/setup.js"
   },
   "dependencies": {
+    "@cloudflare/kumo": "^0.3.0",
     "cloudflare": "^4.5.0",
     "hono": "^4.2.1",
     "workers-qb": "^0.1.1"
+  },
+  "cloudflare": {
+    "bindings": {
+      "CLOUDFLARE_API_KEY": {
+        "description": "Your Cloudflare Global API Key. Find it at [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) under 'Global API Key'."
+      },
+      "CLOUDFLARE_API_EMAIL": {
+        "description": "The email address associated with your Cloudflare account."
+      },
+      "CUSTOM_DOMAIN": {
+        "description": "Your root domain for hosting sites (e.g., `yourdomain.com`). Leave empty to use workers.dev subdomain only."
+      },
+      "CLOUDFLARE_ZONE_ID": {
+        "description": "The Zone ID for your custom domain. Find it in the Cloudflare dashboard under your domain's **Overview** page in the right sidebar."
+      },
+      "FALLBACK_ORIGIN": {
+        "description": "The hostname where user CNAMEs should point (e.g., `proxy.yourdomain.com`). Required for custom domain support."
+      }
+    }
   }
 }

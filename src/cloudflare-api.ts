@@ -1,19 +1,36 @@
 // Cloudflare API integration for custom hostnames
 import type { Env } from './env';
 
+function getAuthHeaders(env: Env): Record<string, string> {
+  // Support both API Token (Bearer) and Global API Key (X-Auth-Key + X-Auth-Email)
+  if (env.CLOUDFLARE_API_TOKEN) {
+    return {
+      'Authorization': `Bearer ${env.CLOUDFLARE_API_TOKEN}`,
+      'Content-Type': 'application/json',
+    };
+  } else if (env.CLOUDFLARE_API_KEY && env.CLOUDFLARE_API_EMAIL) {
+    return {
+      'X-Auth-Key': env.CLOUDFLARE_API_KEY,
+      'X-Auth-Email': env.CLOUDFLARE_API_EMAIL,
+      'Content-Type': 'application/json',
+    };
+  }
+  return {};
+}
+
+function isApiConfigured(env: Env): boolean {
+  return !!(env.CLOUDFLARE_ZONE_ID && (env.CLOUDFLARE_API_TOKEN || (env.CLOUDFLARE_API_KEY && env.CLOUDFLARE_API_EMAIL)));
+}
+
 export async function createCustomHostname(env: Env, hostname: string): Promise<boolean> {
-  if (!env.CLOUDFLARE_ZONE_ID || !env.CLOUDFLARE_API_TOKEN) {
-    console.warn('Custom hostname API not configured');
+  if (!isApiConfigured(env)) {
     return false;
   }
 
   try {
     const response = await fetch(`https://api.cloudflare.com/client/v4/zones/${env.CLOUDFLARE_ZONE_ID}/custom_hostnames`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${env.CLOUDFLARE_API_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(env),
       body: JSON.stringify({
         hostname: hostname,
         ssl: {
@@ -28,17 +45,8 @@ export async function createCustomHostname(env: Env, hostname: string): Promise<
       })
     });
 
-    const result = await response.json();
-    
-    if (response.ok) {
-      console.log(`Custom hostname created: ${hostname}`);
-      return true;
-    } else {
-      console.error('Failed to create custom hostname:', result);
-      return false;
-    }
+    return response.ok;
   } catch (error) {
-    console.error('Error creating custom hostname:', error);
     return false;
   }
 }
@@ -46,28 +54,32 @@ export async function createCustomHostname(env: Env, hostname: string): Promise<
 export interface CustomHostnameStatus {
   status: 'active' | 'pending' | 'error' | 'not_found';
   ssl?: {
-    status: 'active' | 'pending' | 'error';
+    status: string;
     validation_method?: string;
+    validation_errors?: string[];
+    validation_records?: Array<{
+      txt_name?: string;
+      txt_value?: string;
+      http_url?: string;
+      http_body?: string;
+    }>;
   };
   verification_errors?: string[];
 }
 
 export async function getCustomHostnameStatus(env: Env, hostname: string): Promise<CustomHostnameStatus> {
-  if (!env.CLOUDFLARE_ZONE_ID || !env.CLOUDFLARE_API_TOKEN) {
+  if (!isApiConfigured(env)) {
     return { status: 'error', verification_errors: ['API not configured'] };
   }
 
   try {
     const response = await fetch(`https://api.cloudflare.com/client/v4/zones/${env.CLOUDFLARE_ZONE_ID}/custom_hostnames?hostname=${hostname}`, {
-      headers: {
-        'Authorization': `Bearer ${env.CLOUDFLARE_API_TOKEN}`,
-      },
+      headers: getAuthHeaders(env),
     });
 
     const result = await response.json();
     
     if (!response.ok) {
-      console.error('Failed to get custom hostname status:', result);
       return { status: 'error', verification_errors: ['API request failed'] };
     }
 
@@ -81,33 +93,31 @@ export async function getCustomHostnameStatus(env: Env, hostname: string): Promi
       status: hostnameData.status,
       ssl: hostnameData.ssl ? {
         status: hostnameData.ssl.status,
-        validation_method: hostnameData.ssl.validation_method
+        validation_method: hostnameData.ssl.method || hostnameData.ssl.validation_method,
+        validation_errors: hostnameData.ssl.validation_errors || [],
+        validation_records: hostnameData.ssl.validation_records || []
       } : undefined,
       verification_errors: hostnameData.verification_errors || []
     };
   } catch (error) {
-    console.error('Error getting custom hostname status:', error);
     return { status: 'error', verification_errors: ['Network error'] };
   }
 }
 
 export async function deleteCustomHostname(env: Env, hostname: string): Promise<boolean> {
-  if (!env.CLOUDFLARE_ZONE_ID || !env.CLOUDFLARE_API_TOKEN) {
+  if (!isApiConfigured(env)) {
     return false;
   }
 
   try {
     // First, get the custom hostname ID
     const listResponse = await fetch(`https://api.cloudflare.com/client/v4/zones/${env.CLOUDFLARE_ZONE_ID}/custom_hostnames?hostname=${hostname}`, {
-      headers: {
-        'Authorization': `Bearer ${env.CLOUDFLARE_API_TOKEN}`,
-      },
+      headers: getAuthHeaders(env),
     });
 
     const listResult = await listResponse.json();
     
     if (!listResponse.ok || !listResult.result || listResult.result.length === 0) {
-      console.warn(`Custom hostname not found: ${hostname}`);
       return false;
     }
 
@@ -116,20 +126,11 @@ export async function deleteCustomHostname(env: Env, hostname: string): Promise<
     // Delete the custom hostname
     const deleteResponse = await fetch(`https://api.cloudflare.com/client/v4/zones/${env.CLOUDFLARE_ZONE_ID}/custom_hostnames/${hostnameId}`, {
       method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${env.CLOUDFLARE_API_TOKEN}`,
-      },
+      headers: getAuthHeaders(env),
     });
 
-    if (deleteResponse.ok) {
-      console.log(`Custom hostname deleted: ${hostname}`);
-      return true;
-    } else {
-      console.error('Failed to delete custom hostname:', await deleteResponse.json());
-      return false;
-    }
+    return deleteResponse.ok;
   } catch (error) {
-    console.error('Error deleting custom hostname:', error);
     return false;
   }
 }

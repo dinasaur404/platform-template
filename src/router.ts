@@ -17,13 +17,8 @@ export const withDb: MiddlewareHandler<{
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function handleDispatchError(c: Context, e: any): Response {
-  console.log(e instanceof Error);
   if (e instanceof Error && e.message.startsWith('Worker not found')) {
     return c.text('Script does not exist', 404);
   }
-  /*
-   * This is a notable error that should be logged.
-   */
-  console.log(JSON.stringify(e, Object.getOwnPropertyNames(e)));
   return c.text('Could not connect to script', 500);
 }

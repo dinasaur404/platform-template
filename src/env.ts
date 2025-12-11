@@ -16,6 +16,8 @@ export type Env = {
   BUILDER_SUBDOMAIN?: string;
   CLOUDFLARE_ZONE_ID?: string;
   CLOUDFLARE_API_TOKEN?: string;
+  CLOUDFLARE_API_KEY?: string;
+  CLOUDFLARE_API_EMAIL?: string;
 }
 
 interface Dispatcher {

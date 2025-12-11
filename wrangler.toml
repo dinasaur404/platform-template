@@ -3,11 +3,7 @@ main = "src/index.ts"
 compatibility_date = "2024-04-03"
 compatibility_flags = ["nodejs_compat"]
 
-# Routes for custom domain support 
-# routes = [
-#  { pattern = "*/*", zone_name = "yourdomain.com" }
-# ]
-
+# Enable workers.dev subdomain (set to false if using custom domain with routes)
 workers_dev = true
 
 # Smart Placement
@@ -17,21 +13,40 @@ placement = { mode = "smart" }
 [observability.logs]
 enabled = true
 
-[[ dispatch_namespaces ]]
+# Workers for Platforms dispatch namespace
+# The namespace will be auto-created by the setup script
+[[dispatch_namespaces]]
 binding = "dispatcher"
-namespace = "workers-platform-template" # make sure this is the same as the DISPATCH_NAMESPACE_NAME var
+namespace = "workers-platform-template"
+remote = true
 
-[[ d1_databases ]]
+# D1 Database for storing project metadata
+# The database will be auto-provisioned during deployment
+[[d1_databases]]
 binding = "DB"
 database_name = "workers-platform-template"
-database_id = "YOUR_DATABASE_ID_HERE"
-preview_database_id = ""
+database_id = "placeholder-will-be-auto-provisioned"
 
 [vars]
+# Dispatch namespace name - must match the namespace above
 DISPATCH_NAMESPACE_NAME = "workers-platform-template"
-ACCOUNT_ID = "YOUR_ACCOUNT_ID_HERE"
-# Custom domain configuration - set these for your deployment
-CUSTOM_DOMAIN = "yourdomain.com"  # Your root domain (change this for your deployment)
-BUILDER_SUBDOMAIN = "build"     # Subdomain where the builder is hosted (build.yourdomain.com)
-FALLBACK_ORIGIN = "my.yourdomain.com"  # Fallback origin for custom hostnames (where CNAMEs point)
-CLOUDFLARE_ZONE_ID = "YOUR_ZONE_ID_HERE"  # Zone ID for custom hostname API calls
+
+# Custom domain configuration (optional)
+# Set CUSTOM_DOMAIN to your root domain to enable custom domain features
+# Leave empty ("") to use workers.dev subdomain only
+CUSTOM_DOMAIN = ""
+
+# Subdomain where the builder UI is hosted (e.g., "build" for build.yourdomain.com)
+BUILDER_SUBDOMAIN = "build"
+
+# Fallback origin for custom hostnames - where user CNAMEs should point
+# This should be a subdomain you control (e.g., "proxy.yourdomain.com")
+FALLBACK_ORIGIN = ""
+
+# Cloudflare Zone ID - required for custom hostname API calls
+# Find this in your Cloudflare dashboard under the domain's Overview page
+CLOUDFLARE_ZONE_ID = ""
+
+# Account ID is automatically detected from the deployment context
+# Only set this if you need to override it
+# ACCOUNT_ID = ""
