@@ -34,7 +34,7 @@ Click the **Deploy to Cloudflare** button above. You'll be prompted for the foll
 |----------|------------------|
 | `CUSTOM_DOMAIN` | Your root domain (e.g., `myplatform.com`). Leave empty to use `*.workers.dev` only |
 | `CLOUDFLARE_ZONE_ID` | Cloudflare Dashboard → Select your domain → **Overview** page → right sidebar → **Zone ID** |
-| `FALLBACK_ORIGIN` | A subdomain for custom hostname CNAMEs (e.g., `proxy.yourdomain.com`) |
+| `FALLBACK_ORIGIN` | Subdomain for customer CNAMEs (e.g., `my.platform.com`) - see Custom Domain Setup |
 
 ---
 
@@ -44,13 +44,15 @@ Click the **Deploy to Cloudflare** button above. You'll be prompted for the foll
 ┌─────────────────────────────────────────────────────────────┐
 │  Your Platform (this template)                              │
 ├─────────────────────────────────────────────────────────────┤
-│  build.yoursite.com        → Website Builder UI             │
-│  build.yoursite.com/admin  → Admin Dashboard                │
+│  platform.com              → Website Builder UI             │
+│  platform.com/admin        → Admin Dashboard                │
 ├─────────────────────────────────────────────────────────────┤
 │  User Sites (Workers for Platforms)                         │
-│  ├── site1.yoursite.com    → User's deployed Worker         │
-│  ├── site2.yoursite.com    → User's deployed Worker         │
+│  ├── site1.platform.com    → User's deployed Worker         │
+│  ├── site2.platform.com    → User's deployed Worker         │
 │  └── custom.userdomain.com → Custom domain with SSL         │
+├─────────────────────────────────────────────────────────────┤
+│  my.platform.com           → Fallback origin for CNAMEs     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -84,12 +86,12 @@ To use your own domain instead of `*.workers.dev`:
 
 ```toml
 [vars]
-CUSTOM_DOMAIN = "yoursite.com"
+CUSTOM_DOMAIN = "platform.com"
 CLOUDFLARE_ZONE_ID = "your-zone-id-here"
-FALLBACK_ORIGIN = "proxy.yoursite.com"
+FALLBACK_ORIGIN = "my.platform.com"
 
 routes = [
-  { pattern = "*/*", zone_name = "yoursite.com" }
+  { pattern = "*/*", zone_name = "platform.com" }
 ]
 
 workers_dev = false
@@ -102,19 +104,19 @@ In your Cloudflare DNS settings:
 | Type | Name | Target | Proxy |
 |------|------|--------|-------|
 | A | `*` | `192.0.2.1` | Proxied |
-| A | `proxy` | `192.0.2.1` | Proxied |
+| A | `my` | `192.0.2.1` | Proxied |
 
-> **Note:** The root domain DNS is automatically configured when you add a custom domain to your Worker in the Cloudflare dashboard. The `192.0.2.1` is a dummy IP - Cloudflare's proxy handles the actual routing.
+> **Note:** The root domain (`platform.com`) is automatically configured when you add a custom domain to your Worker in the Cloudflare dashboard. The `192.0.2.1` is a dummy IP - Cloudflare's proxy handles the actual routing.
 
-**About the `proxy` record (Fallback Origin):**
+**About the Fallback Origin (`my.platform.com`):**
 
-This is the hostname that your customers will CNAME their custom domains to. When a user wants to connect their own domain (e.g., `shop.example.com`), they'll add a DNS record:
+This is the hostname your customers will CNAME their custom domains to. When a user wants to connect their own domain (e.g., `shop.example.com`), they add:
 
 ```
-CNAME  shop.example.com  →  proxy.yoursite.com
+CNAME  shop.example.com  →  my.platform.com
 ```
 
-Cloudflare uses this fallback origin to route traffic for custom hostnames. The `FALLBACK_ORIGIN` variable in your config should match this record (e.g., `proxy.yoursite.com`).
+Cloudflare uses this fallback origin to route traffic for custom hostnames.
 
 ### 3. Redeploy
 
@@ -129,7 +131,7 @@ npm run deploy
 The admin page (`/admin`) shows all projects. Protect it with [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-apps/):
 
 1. Go to **Zero Trust** → **Access** → **Applications**
-2. Add application for `yourdomain.com/admin*`
+2. Add application for `platform.com/admin*`
 3. Configure authentication policy
 
 ---
