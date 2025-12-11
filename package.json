@@ -25,12 +25,6 @@
   },
   "cloudflare": {
     "bindings": {
-      "CLOUDFLARE_API_KEY": {
-        "description": "Your Global API Key (for managing user sites). Find at dash.cloudflare.com/profile/api-tokens → Global API Key → View"
-      },
-      "CLOUDFLARE_API_EMAIL": {
-        "description": "Your Cloudflare account email address"
-      },
       "CUSTOM_DOMAIN": {
         "description": "(Optional) Your root domain (e.g., platform.com). Leave empty to use workers.dev"
       }

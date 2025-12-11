@@ -5,10 +5,11 @@
  * 
  * Setup script for Deploy to Cloudflare button flow.
  * - Creates dispatch namespace
+ * - Creates a permanent API token with correct permissions
  * - Auto-detects zone ID for custom domain
  * - Updates wrangler.toml with routes
  * 
- * Only requires CUSTOM_DOMAIN from user - everything else is auto-detected.
+ * Uses the temporary CF_API_TOKEN from deploy flow to create permanent resources.
  */
 
 const { execSync } = require('child_process');
@@ -22,6 +23,7 @@ const green = '\x1b[32m';
 const yellow = '\x1b[33m';
 const blue = '\x1b[34m';
 const cyan = '\x1b[36m';
+const red = '\x1b[31m';
 const reset = '\x1b[0m';
 
 function log(color, msg) {
@@ -30,32 +32,21 @@ function log(color, msg) {
 
 function getConfig() {
   // Read from environment variables (set by Deploy to Cloudflare flow)
-  // The deploy system auto-provides CF_ACCOUNT_ID and CF_API_TOKEN
+  // CF_API_TOKEN and CF_ACCOUNT_ID are auto-provided by the deploy system
   return {
     accountId: process.env.CF_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID || process.env.ACCOUNT_ID,
     apiToken: process.env.CF_API_TOKEN || process.env.CLOUDFLARE_API_TOKEN || process.env.DISPATCH_NAMESPACE_API_TOKEN,
-    apiKey: process.env.CLOUDFLARE_API_KEY,
-    apiEmail: process.env.CLOUDFLARE_API_EMAIL,
     customDomain: process.env.CUSTOM_DOMAIN,
     zoneId: process.env.CLOUDFLARE_ZONE_ID,
     fallbackOrigin: process.env.FALLBACK_ORIGIN
   };
 }
 
-function getAuthHeaders(config) {
-  if (config.apiToken) {
-    return {
-      'Authorization': `Bearer ${config.apiToken}`,
-      'Content-Type': 'application/json'
-    };
-  } else if (config.apiKey && config.apiEmail) {
-    return {
-      'X-Auth-Key': config.apiKey,
-      'X-Auth-Email': config.apiEmail,
-      'Content-Type': 'application/json'
-    };
-  }
-  return null;
+function getAuthHeaders(apiToken) {
+  return {
+    'Authorization': `Bearer ${apiToken}`,
+    'Content-Type': 'application/json'
+  };
 }
 
 function getDispatchNamespaceFromConfig() {
@@ -100,6 +91,106 @@ function ensureDispatchNamespace(namespaceName) {
   }
 }
 
+async function createPermanentToken(config) {
+  if (!config.apiToken || !config.accountId) {
+    log(yellow, '⚠️  No API token or account ID - cannot create permanent token');
+    return null;
+  }
+
+  log(blue, '🔐 Creating permanent API token for runtime operations...');
+
+  try {
+    // First, get the permission group IDs we need
+    // We need: Workers Scripts (Read/Write), Zone Read (for custom hostnames)
+    const permGroupsResponse = await fetch(
+      'https://api.cloudflare.com/client/v4/user/tokens/permission_groups',
+      { headers: getAuthHeaders(config.apiToken) }
+    );
+    const permGroupsData = await permGroupsResponse.json();
+    
+    if (!permGroupsData.success) {
+      log(yellow, '⚠️  Could not fetch permission groups');
+      return null;
+    }
+
+    // Find the permission groups we need
+    const permGroups = permGroupsData.result || [];
+    const findPermGroup = (name) => {
+      const group = permGroups.find(g => g.name === name);
+      return group ? { id: group.id, name: group.name } : null;
+    };
+
+    const accountPermissions = [
+      findPermGroup('Workers Scripts Read'),
+      findPermGroup('Workers Scripts Write'),
+      findPermGroup('Account Settings Read'),
+    ].filter(Boolean);
+
+    const zonePermissions = [
+      findPermGroup('Zone Read'),
+      findPermGroup('SSL and Certificates Write'), // For custom hostnames
+      findPermGroup('SSL and Certificates Read'),
+    ].filter(Boolean);
+
+    log(cyan, `   Found ${accountPermissions.length} account permissions, ${zonePermissions.length} zone permissions`);
+
+    // Build policies
+    const policies = [];
+    
+    // Account-level permissions
+    if (accountPermissions.length > 0) {
+      policies.push({
+        effect: 'allow',
+        resources: { [`com.cloudflare.api.account.${config.accountId}`]: '*' },
+        permission_groups: accountPermissions
+      });
+    }
+
+    // Zone-level permissions (for all zones in account)
+    if (zonePermissions.length > 0) {
+      policies.push({
+        effect: 'allow',
+        resources: { [`com.cloudflare.api.account.${config.accountId}`]: '*' },
+        permission_groups: zonePermissions
+      });
+    }
+
+    if (policies.length === 0) {
+      log(yellow, '⚠️  No valid permissions found');
+      return null;
+    }
+
+    const tokenResponse = await fetch('https://api.cloudflare.com/client/v4/user/tokens', {
+      method: 'POST',
+      headers: getAuthHeaders(config.apiToken),
+      body: JSON.stringify({
+        name: `Workers Platform Template - ${new Date().toISOString().split('T')[0]}`,
+        policies,
+        condition: {},
+        expires_on: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+      })
+    });
+
+    const tokenData = await tokenResponse.json();
+
+    if (tokenResponse.ok && tokenData.success && tokenData.result?.value) {
+      log(green, '✅ Created permanent API token');
+      log(cyan, `   Token ID: ${tokenData.result.id}`);
+      return tokenData.result.value;
+    } else {
+      log(yellow, `⚠️  Could not create token: ${tokenData.errors?.[0]?.message || 'Unknown error'}`);
+      // Log more details for debugging
+      if (tokenData.errors) {
+        tokenData.errors.forEach(e => log(yellow, `   Error: ${e.message}`));
+      }
+      return null;
+    }
+  } catch (error) {
+    log(yellow, `⚠️  Token creation failed: ${error.message}`);
+    return null;
+  }
+}
+
 async function detectZoneId(config) {
   if (!config.customDomain || config.customDomain === '') {
     return null;
@@ -110,16 +201,14 @@ async function detectZoneId(config) {
     return config.zoneId;
   }
 
-  const headers = getAuthHeaders(config);
-  if (!headers) {
-    log(yellow, '⚠️  No API credentials - cannot auto-detect zone ID');
+  if (!config.apiToken) {
+    log(yellow, '⚠️  No API token - cannot auto-detect zone ID');
     return null;
   }
 
   log(blue, `🔍 Auto-detecting zone ID for ${config.customDomain}...`);
 
   try {
-    // Try to find zone by domain name
     const domainParts = config.customDomain.split('.');
     
     for (let i = 0; i < domainParts.length - 1; i++) {
@@ -130,7 +219,7 @@ async function detectZoneId(config) {
         url += `&account.id=${config.accountId}`;
       }
 
-      const response = await fetch(url, { headers });
+      const response = await fetch(url, { headers: getAuthHeaders(config.apiToken) });
       const data = await response.json();
 
       if (data.success && data.result && data.result.length > 0) {
@@ -141,7 +230,6 @@ async function detectZoneId(config) {
     }
 
     log(yellow, `⚠️  Could not auto-detect zone ID for ${config.customDomain}`);
-    log(yellow, '   You may need to add routes manually in the Cloudflare dashboard');
     return null;
   } catch (error) {
     log(yellow, `⚠️  Zone detection failed: ${error.message}`);
@@ -166,8 +254,6 @@ function updateWranglerConfig(config) {
       /CUSTOM_DOMAIN = ".*"/,
       `CUSTOM_DOMAIN = "${config.customDomain}"`
     );
-
-    // Set workers_dev = false for custom domain
     content = content.replace(
       /workers_dev = true/,
       'workers_dev = false'
@@ -198,10 +284,8 @@ function updateWranglerConfig(config) {
 
   // Add routes if custom domain and zone ID are configured
   if (config.customDomain && config.customDomain !== '' && config.zoneId) {
-    // Remove any existing routes section
     content = content.replace(/\n# Routes for custom domain\nroutes = \[[\s\S]*?\]\n/g, '');
     
-    // Add new routes section before [vars] or at the end
     const routesSection = `
 # Routes for custom domain
 routes = [
@@ -210,7 +294,6 @@ routes = [
 ]
 `;
 
-    // Insert before [vars] section
     if (content.includes('[vars]')) {
       content = content.replace('[vars]', `${routesSection}\n[vars]`);
     } else {
@@ -229,6 +312,39 @@ routes = [
   return modified;
 }
 
+async function setWranglerSecrets(config) {
+  if (!config.permanentToken) {
+    log(yellow, '⚠️  No permanent token to set as secret');
+    return;
+  }
+
+  log(blue, '🔐 Setting API token as worker secret...');
+
+  try {
+    // Use wrangler to set the secret
+    execSync(`echo "${config.permanentToken}" | npx wrangler secret put DISPATCH_NAMESPACE_API_TOKEN`, {
+      stdio: 'pipe',
+      cwd: PROJECT_ROOT
+    });
+    log(green, '✅ Set DISPATCH_NAMESPACE_API_TOKEN secret');
+  } catch (error) {
+    log(yellow, `⚠️  Could not set secret via wrangler: ${error.message}`);
+    log(yellow, '   You may need to set DISPATCH_NAMESPACE_API_TOKEN manually in the dashboard');
+  }
+
+  if (config.accountId) {
+    try {
+      execSync(`echo "${config.accountId}" | npx wrangler secret put ACCOUNT_ID`, {
+        stdio: 'pipe',
+        cwd: PROJECT_ROOT
+      });
+      log(green, '✅ Set ACCOUNT_ID secret');
+    } catch (error) {
+      log(yellow, `⚠️  Could not set ACCOUNT_ID secret: ${error.message}`);
+    }
+  }
+}
+
 async function main() {
   console.log('');
   log(blue, '🚀 Workers for Platforms - Quick Setup');
@@ -241,9 +357,13 @@ async function main() {
   log(cyan, '📋 Configuration detected:');
   if (config.accountId) {
     log(cyan, `   Account ID: ${config.accountId.substring(0, 8)}...`);
+  } else {
+    log(yellow, '   Account ID: (not found)');
   }
   if (config.apiToken) {
     log(cyan, `   API Token: ${config.apiToken.substring(0, 8)}...`);
+  } else {
+    log(yellow, '   API Token: (not found)');
   }
   if (config.customDomain) {
     log(cyan, `   Custom Domain: ${config.customDomain}`);
@@ -256,6 +376,9 @@ async function main() {
   const namespaceName = getDispatchNamespaceFromConfig();
   ensureDispatchNamespace(namespaceName);
 
+  // Create permanent API token for runtime use
+  config.permanentToken = await createPermanentToken(config);
+
   // Auto-detect zone ID if custom domain is set
   if (config.customDomain && config.customDomain !== '' && !config.zoneId) {
     config.zoneId = await detectZoneId(config);
@@ -263,6 +386,15 @@ async function main() {
 
   // Update wrangler.toml with config
   updateWranglerConfig(config);
+
+  // Set secrets for the worker
+  // Note: This runs before wrangler deploy, so secrets need to be set after
+  // The deploy flow should handle this, but we log what's needed
+  if (config.permanentToken) {
+    log(blue, '\n📝 Secrets to configure (will be set after deployment):');
+    log(cyan, `   DISPATCH_NAMESPACE_API_TOKEN: ${config.permanentToken.substring(0, 8)}...`);
+    log(cyan, `   ACCOUNT_ID: ${config.accountId}`);
+  }
   
   console.log('');
   log(green, '✅ Quick setup complete');
