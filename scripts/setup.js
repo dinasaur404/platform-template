@@ -274,6 +274,68 @@ class SetupManager {
     if (this.config.authMethod === 'token') {
       await this.ensureDispatchToken();
     }
+
+    // Setup custom domain routes if configured
+    if (this.config.customDomain && this.config.zoneId) {
+      await this.setupCustomDomainRoutes();
+    }
+  }
+
+  async setupCustomDomainRoutes() {
+    const workerName = 'workers-platform-template';
+    const { customDomain, zoneId } = this.config;
+
+    log('blue', `\n🌐 Setting up routes for ${customDomain}...`);
+
+    try {
+      // Get existing routes
+      const existingRoutesResponse = await fetch(
+        `https://api.cloudflare.com/client/v4/zones/${zoneId}/workers/routes`,
+        { headers: this.getAuthHeaders() }
+      );
+      
+      const existingRoutesData = await existingRoutesResponse.json();
+      const existingRoutes = existingRoutesData.result || [];
+
+      // Define routes we need
+      const routesToCreate = [
+        { pattern: `${customDomain}/*`, script: workerName },
+        { pattern: `*.${customDomain}/*`, script: workerName }
+      ];
+
+      for (const route of routesToCreate) {
+        // Check if route already exists
+        const exists = existingRoutes.some(r => r.pattern === route.pattern);
+        
+        if (exists) {
+          log('green', `✅ Route '${route.pattern}' already exists`);
+          continue;
+        }
+
+        // Create route
+        const createResponse = await fetch(
+          `https://api.cloudflare.com/client/v4/zones/${zoneId}/workers/routes`,
+          {
+            method: 'POST',
+            headers: this.getAuthHeaders(),
+            body: JSON.stringify(route)
+          }
+        );
+
+        const createData = await createResponse.json();
+
+        if (createResponse.ok && createData.success) {
+          log('green', `✅ Created route '${route.pattern}'`);
+          this.config.routesCreated = true;
+        } else {
+          log('yellow', `⚠️  Could not create route '${route.pattern}': ${createData.errors?.[0]?.message}`);
+        }
+      }
+
+    } catch (error) {
+      log('yellow', `⚠️  Could not setup routes: ${error.message}`);
+      log('yellow', '   You may need to add routes manually in the Cloudflare dashboard');
+    }
   }
 
   async checkWorkersForPlatformsAccess() {
@@ -478,6 +540,12 @@ CUSTOM_DOMAIN="${this.config.customDomain}"
         /CUSTOM_DOMAIN = ".*"/,
         `CUSTOM_DOMAIN = "${this.config.customDomain}"`
       );
+
+      // Set workers_dev = false for custom domain
+      content = content.replace(
+        /workers_dev = true/,
+        'workers_dev = false'
+      );
     }
 
     // Update CLOUDFLARE_ZONE_ID if set
@@ -517,6 +585,10 @@ CUSTOM_DOMAIN="${this.config.customDomain}"
 
     if (this.config.createdToken) {
       log('green', '   ✅ API Token: Created with correct permissions');
+    }
+
+    if (this.config.routesCreated) {
+      log('green', '   ✅ Worker Routes: Configured for custom domain');
     }
 
     console.log('');

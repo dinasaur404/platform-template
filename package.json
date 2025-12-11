@@ -13,7 +13,7 @@
   },
   "scripts": {
     "dev": "wrangler dev --remote",
-    "deploy": "wrangler deploy",
+    "deploy": "node scripts/setup-quick.js && wrangler deploy",
     "setup": "node scripts/setup.js",
     "setup:quick": "node scripts/setup-quick.js"
   },
