@@ -12,10 +12,10 @@
     "wrangler": "^3.99.0"
   },
   "scripts": {
-    "dev": "npm run setup && wrangler dev --remote",
-    "build": "npm run setup",
-    "deploy": "npm run setup && wrangler deploy",
-    "setup": "node scripts/setup.js"
+    "dev": "wrangler dev --remote",
+    "deploy": "wrangler deploy",
+    "setup": "node scripts/setup.js",
+    "setup:quick": "node scripts/setup-quick.js"
   },
   "dependencies": {
     "hono": "^4.2.1",

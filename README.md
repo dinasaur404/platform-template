@@ -68,13 +68,19 @@ cd platform-template
 # Install
 npm install
 
-# Configure secrets
-cp .dev.vars.example .dev.vars
-# Edit .dev.vars with your values
+# Run interactive setup (creates tokens, configures everything)
+npm run setup
 
 # Deploy
 npm run deploy
 ```
+
+The setup script will:
+- Validate your Cloudflare credentials
+- Create the dispatch namespace for Workers for Platforms
+- Auto-create API tokens with correct permissions (if needed)
+- Generate `.dev.vars` with all required configuration
+- Update `wrangler.toml` with your settings
 
 ---
 
