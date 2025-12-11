@@ -1,7 +1,3 @@
-# Workers for Platforms Template - Environment Variables
+# Workers for Platforms Template - Secrets
 # Copy to .dev.vars for local development
-# All values are auto-provisioned during deployment - no manual setup needed!
-
-# Optional: Custom domain for your platform (e.g., myplatform.com)
-# Leave empty to use workers.dev subdomain
-CUSTOM_DOMAIN=
+# All secrets are auto-provisioned during deployment - no manual setup needed!
