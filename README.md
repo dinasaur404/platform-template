@@ -105,6 +105,16 @@ In your Cloudflare DNS settings:
 | CNAME | `*` | `your-worker.workers.dev` | Proxied |
 | CNAME | `proxy` | `your-worker.workers.dev` | Proxied |
 
+**About the `proxy` record (Fallback Origin):**
+
+This is the hostname that your customers will CNAME their custom domains to. When a user wants to connect their own domain (e.g., `shop.example.com`), they'll add a DNS record:
+
+```
+CNAME  shop.example.com  →  proxy.yoursite.com
+```
+
+Cloudflare uses this fallback origin to route traffic for custom hostnames. The `FALLBACK_ORIGIN` variable in your config should match this record (e.g., `proxy.yoursite.com`).
+
 ### 3. Redeploy
 
 ```bash
