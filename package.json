@@ -26,7 +26,6 @@
   "cloudflare": {
     "bindings": {
       "CUSTOM_DOMAIN": {
-        "type": "var",
         "description": "(Optional) Your platform's domain, e.g. `myplatform.com`. Leave empty to use workers.dev"
       }
     }
