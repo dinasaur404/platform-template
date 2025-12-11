@@ -101,9 +101,10 @@ In your Cloudflare DNS settings:
 
 | Type | Name | Target | Proxy |
 |------|------|--------|-------|
-| CNAME | `build` | `your-worker.workers.dev` | Proxied |
-| CNAME | `*` | `your-worker.workers.dev` | Proxied |
-| CNAME | `proxy` | `your-worker.workers.dev` | Proxied |
+| A | `*` | `192.0.2.1` | Proxied |
+| A | `proxy` | `192.0.2.1` | Proxied |
+
+> **Note:** The root domain DNS is automatically configured when you add a custom domain to your Worker in the Cloudflare dashboard. The `192.0.2.1` is a dummy IP - Cloudflare's proxy handles the actual routing.
 
 **About the `proxy` record (Fallback Origin):**
 
