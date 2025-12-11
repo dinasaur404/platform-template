@@ -8,7 +8,7 @@
  * - Creates dispatch namespace for Workers for Platforms
  * - Auto-creates API tokens with correct permissions
  * - Generates .dev.vars file with all required secrets
- * - Updates wrangler.toml with resource IDs
+ * - Updates wrangler.toml with routes and resource IDs
  */
 
 const { execSync } = require('child_process');
@@ -194,15 +194,20 @@ class SetupManager {
       this.existingConfig.CUSTOM_DOMAIN
     );
 
-    if (this.config.customDomain && this.config.customDomain !== 'localhost:5173') {
-      this.config.zoneId = await this.promptWithDefault(
-        'Zone ID for custom domain',
-        this.existingConfig.CLOUDFLARE_ZONE_ID
-      );
+    if (this.config.customDomain && this.config.customDomain !== 'localhost:5173' && this.config.customDomain !== '') {
+      // Try to auto-detect zone
+      await this.detectZoneForDomain();
+
+      if (!this.config.zoneId) {
+        this.config.zoneId = await this.promptWithDefault(
+          'Zone ID for custom domain',
+          this.existingConfig.CLOUDFLARE_ZONE_ID
+        );
+      }
 
       this.config.fallbackOrigin = await this.promptWithDefault(
         'Fallback origin hostname (e.g., my.platform.com)',
-        this.existingConfig.FALLBACK_ORIGIN
+        this.existingConfig.FALLBACK_ORIGIN || `my.${this.config.customDomain}`
       );
 
       if (this.config.fallbackOrigin) {
@@ -254,10 +259,45 @@ class SetupManager {
       const accountData = await accountResponse.json();
       if (accountData.success && accountData.result) {
         log('green', `✅ Connected to account: ${accountData.result.name}`);
+        this.config.accountName = accountData.result.name;
       }
 
     } catch (error) {
       throw new Error(`Credential validation failed: ${error.message}`);
+    }
+  }
+
+  async detectZoneForDomain() {
+    if (!this.config.customDomain) return;
+
+    log('blue', `🔍 Detecting zone for ${this.config.customDomain}...`);
+
+    try {
+      // Try to find zone by domain name
+      const domainParts = this.config.customDomain.split('.');
+      
+      for (let i = 0; i < domainParts.length - 1; i++) {
+        const zoneName = domainParts.slice(i).join('.');
+        
+        const response = await fetch(
+          `https://api.cloudflare.com/client/v4/zones?name=${zoneName}&account.id=${this.config.accountId}`,
+          { headers: this.getAuthHeaders() }
+        );
+
+        const data = await response.json();
+
+        if (data.success && data.result && data.result.length > 0) {
+          const zone = data.result[0];
+          log('green', `✅ Found zone: ${zone.name} (ID: ${zone.id})`);
+          this.config.zoneId = zone.id;
+          this.config.zoneName = zone.name;
+          return;
+        }
+      }
+
+      log('yellow', `⚠️  Could not auto-detect zone for ${this.config.customDomain}`);
+    } catch (error) {
+      log('yellow', `⚠️  Zone detection failed: ${error.message}`);
     }
   }
 
@@ -273,68 +313,6 @@ class SetupManager {
     // Create specialized API token if needed
     if (this.config.authMethod === 'token') {
       await this.ensureDispatchToken();
-    }
-
-    // Setup custom domain routes if configured
-    if (this.config.customDomain && this.config.zoneId) {
-      await this.setupCustomDomainRoutes();
-    }
-  }
-
-  async setupCustomDomainRoutes() {
-    const workerName = 'workers-platform-template';
-    const { customDomain, zoneId } = this.config;
-
-    log('blue', `\n🌐 Setting up routes for ${customDomain}...`);
-
-    try {
-      // Get existing routes
-      const existingRoutesResponse = await fetch(
-        `https://api.cloudflare.com/client/v4/zones/${zoneId}/workers/routes`,
-        { headers: this.getAuthHeaders() }
-      );
-      
-      const existingRoutesData = await existingRoutesResponse.json();
-      const existingRoutes = existingRoutesData.result || [];
-
-      // Define routes we need
-      const routesToCreate = [
-        { pattern: `${customDomain}/*`, script: workerName },
-        { pattern: `*.${customDomain}/*`, script: workerName }
-      ];
-
-      for (const route of routesToCreate) {
-        // Check if route already exists
-        const exists = existingRoutes.some(r => r.pattern === route.pattern);
-        
-        if (exists) {
-          log('green', `✅ Route '${route.pattern}' already exists`);
-          continue;
-        }
-
-        // Create route
-        const createResponse = await fetch(
-          `https://api.cloudflare.com/client/v4/zones/${zoneId}/workers/routes`,
-          {
-            method: 'POST',
-            headers: this.getAuthHeaders(),
-            body: JSON.stringify(route)
-          }
-        );
-
-        const createData = await createResponse.json();
-
-        if (createResponse.ok && createData.success) {
-          log('green', `✅ Created route '${route.pattern}'`);
-          this.config.routesCreated = true;
-        } else {
-          log('yellow', `⚠️  Could not create route '${route.pattern}': ${createData.errors?.[0]?.message}`);
-        }
-      }
-
-    } catch (error) {
-      log('yellow', `⚠️  Could not setup routes: ${error.message}`);
-      log('yellow', '   You may need to add routes manually in the Cloudflare dashboard');
     }
   }
 
@@ -494,7 +472,7 @@ CLOUDFLARE_API_EMAIL="${this.config.apiEmail}"
 `;
     }
 
-    if (this.config.customDomain) {
+    if (this.config.customDomain && this.config.customDomain !== '') {
       content += `
 # Custom Domain Configuration
 CUSTOM_DOMAIN="${this.config.customDomain}"
@@ -534,8 +512,8 @@ CUSTOM_DOMAIN="${this.config.customDomain}"
 
     let content = fs.readFileSync(wranglerPath, 'utf-8');
 
-    // Update CUSTOM_DOMAIN if set
-    if (this.config.customDomain && this.config.customDomain !== 'localhost:5173') {
+    // Update vars section
+    if (this.config.customDomain && this.config.customDomain !== '') {
       content = content.replace(
         /CUSTOM_DOMAIN = ".*"/,
         `CUSTOM_DOMAIN = "${this.config.customDomain}"`
@@ -548,7 +526,6 @@ CUSTOM_DOMAIN="${this.config.customDomain}"
       );
     }
 
-    // Update CLOUDFLARE_ZONE_ID if set
     if (this.config.zoneId) {
       content = content.replace(
         /CLOUDFLARE_ZONE_ID = ".*"/,
@@ -556,12 +533,36 @@ CUSTOM_DOMAIN="${this.config.customDomain}"
       );
     }
 
-    // Update FALLBACK_ORIGIN if set
     if (this.config.fallbackOrigin) {
       content = content.replace(
         /FALLBACK_ORIGIN = ".*"/,
         `FALLBACK_ORIGIN = "${this.config.fallbackOrigin}"`
       );
+    }
+
+    // Add routes if custom domain is configured
+    if (this.config.customDomain && this.config.customDomain !== '' && this.config.zoneId) {
+      // Remove any existing routes section
+      content = content.replace(/\n# Routes for custom domain\nroutes = \[[\s\S]*?\]\n/g, '');
+      
+      // Add new routes section before [vars] or at the end
+      const routesSection = `
+# Routes for custom domain
+routes = [
+  { pattern = "${this.config.customDomain}/*", zone_id = "${this.config.zoneId}" },
+  { pattern = "*.${this.config.customDomain}/*", zone_id = "${this.config.zoneId}" }
+]
+`;
+
+      // Insert before [vars] section
+      if (content.includes('[vars]')) {
+        content = content.replace('[vars]', `${routesSection}\n[vars]`);
+      } else {
+        content += routesSection;
+      }
+
+      log('green', '✅ Added routes for custom domain');
+      this.config.routesAdded = true;
     }
 
     fs.writeFileSync(wranglerPath, content, 'utf-8');
@@ -587,15 +588,18 @@ CUSTOM_DOMAIN="${this.config.customDomain}"
       log('green', '   ✅ API Token: Created with correct permissions');
     }
 
-    if (this.config.routesCreated) {
-      log('green', '   ✅ Worker Routes: Configured for custom domain');
+    if (this.config.routesAdded) {
+      log('green', '   ✅ Routes: Added to wrangler.toml');
     }
 
     console.log('');
     log('blue', '📋 Configuration:');
     log('cyan', `   Account ID: ${this.config.accountId}`);
-    if (this.config.customDomain) {
+    if (this.config.customDomain && this.config.customDomain !== '') {
       log('cyan', `   Custom Domain: ${this.config.customDomain}`);
+      if (this.config.zoneId) {
+        log('cyan', `   Zone ID: ${this.config.zoneId}`);
+      }
       if (this.config.fallbackOrigin) {
         log('cyan', `   Fallback Origin: ${this.config.fallbackOrigin}`);
       }
@@ -605,22 +609,26 @@ CUSTOM_DOMAIN="${this.config.customDomain}"
 
     console.log('');
     log('blue', '🎯 Next Steps:');
-    log('cyan', '   1. Run `npm run dev` to start local development');
-    log('cyan', '   2. Run `npm run deploy` to deploy to Cloudflare');
+    log('cyan', '   1. Run `npm run deploy` to deploy to Cloudflare');
+    log('cyan', '   2. Run `npm run dev` to start local development');
     
-    if (this.config.customDomain) {
+    if (this.config.customDomain && this.config.customDomain !== '') {
       console.log('');
       log('yellow', '📝 DNS Setup Required:');
       log('yellow', `   Add these DNS records for ${this.config.customDomain}:`);
-      log('cyan', '   ┌──────┬──────┬─────────────┬─────────────────────┐');
-      log('cyan', '   │ Type │ Name │ Content     │ Result              │');
-      log('cyan', '   ├──────┼──────┼─────────────┼─────────────────────┤');
-      log('cyan', `   │ A    │ *    │ 192.0.2.1   │ *.${this.config.customDomain} │`);
+      console.log('');
+      log('cyan', '   ┌───────┬──────────┬─────────────┬────────────────────────────┐');
+      log('cyan', '   │ Type  │ Name     │ Content     │ Result                     │');
+      log('cyan', '   ├───────┼──────────┼─────────────┼────────────────────────────┤');
+      log('cyan', `   │ A     │ @        │ 192.0.2.1   │ ${this.config.customDomain.padEnd(26)} │`);
+      log('cyan', `   │ A     │ *        │ 192.0.2.1   │ *.${this.config.customDomain.padEnd(23)} │`);
       if (this.config.fallbackOrigin) {
         const fbName = this.config.fallbackOrigin.replace(`.${this.config.customDomain}`, '');
-        log('cyan', `   │ A    │ ${fbName.padEnd(4)} │ 192.0.2.1   │ ${this.config.fallbackOrigin} │`);
+        log('cyan', `   │ A     │ ${fbName.padEnd(8)} │ 192.0.2.1   │ ${this.config.fallbackOrigin.padEnd(26)} │`);
       }
-      log('cyan', '   └──────┴──────┴─────────────┴─────────────────────┘');
+      log('cyan', '   └───────┴──────────┴─────────────┴────────────────────────���───┘');
+      console.log('');
+      log('yellow', '   Note: 192.0.2.1 is a dummy IP - Cloudflare proxy handles routing.');
     }
 
     console.log('');
