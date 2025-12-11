@@ -30,15 +30,30 @@ function log(color, msg) {
   console.log(`${color}${msg}${reset}`);
 }
 
+function getVarFromWranglerToml(varName) {
+  const configPath = path.join(PROJECT_ROOT, 'wrangler.toml');
+  if (fs.existsSync(configPath)) {
+    const content = fs.readFileSync(configPath, 'utf-8');
+    // Match VAR_NAME = "value" in [vars] section
+    const regex = new RegExp(`${varName}\\s*=\\s*["']([^"']*)["']`);
+    const match = content.match(regex);
+    if (match && match[1] && match[1] !== '') {
+      return match[1];
+    }
+  }
+  return null;
+}
+
 function getConfig() {
   // Read from environment variables (set by Deploy to Cloudflare flow)
   // CF_API_TOKEN and CF_ACCOUNT_ID are auto-provided by the deploy system
+  // Also check wrangler.toml for vars set by deploy form
   return {
     accountId: process.env.CF_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID || process.env.ACCOUNT_ID,
     apiToken: process.env.CF_API_TOKEN || process.env.CLOUDFLARE_API_TOKEN || process.env.DISPATCH_NAMESPACE_API_TOKEN,
-    customDomain: process.env.CUSTOM_DOMAIN,
-    zoneId: process.env.CLOUDFLARE_ZONE_ID,
-    fallbackOrigin: process.env.FALLBACK_ORIGIN
+    customDomain: process.env.CUSTOM_DOMAIN || getVarFromWranglerToml('CUSTOM_DOMAIN'),
+    zoneId: process.env.CLOUDFLARE_ZONE_ID || getVarFromWranglerToml('CLOUDFLARE_ZONE_ID'),
+    fallbackOrigin: process.env.FALLBACK_ORIGIN || getVarFromWranglerToml('FALLBACK_ORIGIN')
   };
 }
 
