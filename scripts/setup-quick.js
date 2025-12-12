@@ -224,7 +224,10 @@ async function detectZoneId(config) {
     return config.zoneId;
   }
 
-  if (!config.apiToken) {
+  // Try user's API token first (has zone read), then deploy token
+  const tokenToUse = config.userApiToken || config.apiToken;
+  
+  if (!tokenToUse) {
     log(yellow, '⚠️  No API token - cannot auto-detect zone ID');
     return null;
   }
@@ -242,7 +245,7 @@ async function detectZoneId(config) {
         url += `&account.id=${config.accountId}`;
       }
 
-      const response = await fetch(url, { headers: getAuthHeaders(config.apiToken) });
+      const response = await fetch(url, { headers: getAuthHeaders(tokenToUse) });
       const data = await response.json();
 
       if (data.success && data.result && data.result.length > 0) {
