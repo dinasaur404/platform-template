@@ -263,6 +263,46 @@ function updateWranglerConfig(config) {
   let content = fs.readFileSync(wranglerPath, 'utf-8');
   let modified = false;
 
+  // Use permanent token if created, otherwise fall back to the deploy-provided API token
+  const apiTokenToUse = config.permanentToken || config.apiToken;
+
+  // Add ACCOUNT_ID to vars if not present
+  if (config.accountId) {
+    if (content.includes('ACCOUNT_ID = "')) {
+      content = content.replace(/ACCOUNT_ID = ".*"/, `ACCOUNT_ID = "${config.accountId}"`);
+    } else {
+      // Add after DISPATCH_NAMESPACE_NAME
+      content = content.replace(
+        /DISPATCH_NAMESPACE_NAME = ".*"/,
+        `DISPATCH_NAMESPACE_NAME = "${getDispatchNamespaceFromConfig()}"\nACCOUNT_ID = "${config.accountId}"`
+      );
+    }
+    modified = true;
+    log(green, `✅ Set ACCOUNT_ID`);
+  }
+
+  // Add DISPATCH_NAMESPACE_API_TOKEN to vars if not present
+  if (apiTokenToUse) {
+    if (content.includes('DISPATCH_NAMESPACE_API_TOKEN = "')) {
+      content = content.replace(/DISPATCH_NAMESPACE_API_TOKEN = ".*"/, `DISPATCH_NAMESPACE_API_TOKEN = "${apiTokenToUse}"`);
+    } else {
+      // Add after ACCOUNT_ID or DISPATCH_NAMESPACE_NAME
+      if (content.includes('ACCOUNT_ID = "')) {
+        content = content.replace(
+          /ACCOUNT_ID = ".*"/,
+          `ACCOUNT_ID = "${config.accountId}"\nDISPATCH_NAMESPACE_API_TOKEN = "${apiTokenToUse}"`
+        );
+      } else {
+        content = content.replace(
+          /DISPATCH_NAMESPACE_NAME = ".*"/,
+          `DISPATCH_NAMESPACE_NAME = "${getDispatchNamespaceFromConfig()}"\nDISPATCH_NAMESPACE_API_TOKEN = "${apiTokenToUse}"`
+        );
+      }
+    }
+    modified = true;
+    log(green, `✅ Set DISPATCH_NAMESPACE_API_TOKEN`);
+  }
+
   // Update CUSTOM_DOMAIN if set
   if (config.customDomain && config.customDomain !== '') {
     content = content.replace(
@@ -279,20 +319,30 @@ function updateWranglerConfig(config) {
 
   // Update CLOUDFLARE_ZONE_ID if set
   if (config.zoneId) {
-    content = content.replace(
-      /CLOUDFLARE_ZONE_ID = ".*"/,
-      `CLOUDFLARE_ZONE_ID = "${config.zoneId}"`
-    );
+    if (content.includes('CLOUDFLARE_ZONE_ID = "')) {
+      content = content.replace(/CLOUDFLARE_ZONE_ID = ".*"/, `CLOUDFLARE_ZONE_ID = "${config.zoneId}"`);
+    } else {
+      // Add to vars section
+      content = content.replace(
+        /CUSTOM_DOMAIN = ".*"/,
+        `CUSTOM_DOMAIN = "${config.customDomain}"\nCLOUDFLARE_ZONE_ID = "${config.zoneId}"`
+      );
+    }
     modified = true;
+    log(green, `✅ Set CLOUDFLARE_ZONE_ID`);
   }
 
   // Set fallback origin (default to my.{domain})
   const fallbackOrigin = config.fallbackOrigin || (config.customDomain ? `my.${config.customDomain}` : '');
   if (fallbackOrigin) {
-    content = content.replace(
-      /FALLBACK_ORIGIN = ".*"/,
-      `FALLBACK_ORIGIN = "${fallbackOrigin}"`
-    );
+    if (content.includes('FALLBACK_ORIGIN = "')) {
+      content = content.replace(/FALLBACK_ORIGIN = ".*"/, `FALLBACK_ORIGIN = "${fallbackOrigin}"`);
+    } else if (config.zoneId) {
+      content = content.replace(
+        `CLOUDFLARE_ZONE_ID = "${config.zoneId}"`,
+        `CLOUDFLARE_ZONE_ID = "${config.zoneId}"\nFALLBACK_ORIGIN = "${fallbackOrigin}"`
+      );
+    }
     modified = true;
     log(green, `✅ Set FALLBACK_ORIGIN = "${fallbackOrigin}"`);
   }

@@ -475,6 +475,7 @@ app.post('/projects', withDbAndInit, async (c) => {
     return c.text('Project created successfully', 201);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('POST /projects error:', errorMessage, error);
     return c.text(`Internal server error: ${errorMessage}`, 500);
   }
 });
