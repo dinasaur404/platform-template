@@ -2068,7 +2068,7 @@ document.addEventListener('DOMContentLoaded', function() {
           if (customHostname) {
             checkDomainStatus(subdomain, customHostname, workerUrl);
           }
-          // User can click the link to visit their site
+          // No auto-redirect - user clicks the link to visit their site
           
         } else {
           responseDiv.innerHTML = \`
