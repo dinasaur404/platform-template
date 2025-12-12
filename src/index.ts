@@ -240,11 +240,12 @@ app.get('/admin', withDbAndInit, async (c) => {
         const getFriendlyError = (errors: string[]) => {
           const rawError = errors.join(' ').toLowerCase();
           
+          const fallbackOrigin = c.env.FALLBACK_ORIGIN || (c.env.CUSTOM_DOMAIN ? `my.${c.env.CUSTOM_DOMAIN}` : 'your-platform-domain');
           if (rawError.includes('a or aaaa records') || rawError.includes('ownership verification')) {
-            return 'Your domain is not pointing to our servers. Add a CNAME record pointing to <strong>my.saasysite.me</strong> and wait for DNS propagation (can take up to 24 hours).';
+            return `Your domain is not pointing to our servers. Add a CNAME record pointing to <strong>${fallbackOrigin}</strong> and wait for DNS propagation (can take up to 24 hours).`;
           }
           if (rawError.includes('cname') && rawError.includes('not found')) {
-            return 'CNAME record not found. Add a CNAME record pointing to <strong>my.saasysite.me</strong>.';
+            return `CNAME record not found. Add a CNAME record pointing to <strong>${fallbackOrigin}</strong>.`;
           }
           if (rawError.includes('timeout') || rawError.includes('timed out')) {
             return 'Verification timed out. Please check your DNS settings and try again.';
@@ -260,7 +261,7 @@ app.get('/admin', withDbAndInit, async (c) => {
             'pending_validation': 'Waiting for SSL certificate validation. This happens automatically once DNS is verified.',
             'pending_issuance': 'SSL certificate is being issued. This usually takes a few minutes.',
             'pending_deployment': 'SSL certificate is being deployed to edge servers.',
-            'validation_timed_out': 'SSL validation timed out. Make sure your domain points to <strong>my.saasysite.me</strong> and click refresh.',
+            'validation_timed_out': `SSL validation timed out. Make sure your domain points to <strong>${fallbackOrigin}</strong> and click refresh.`,
             'expired': 'SSL certificate has expired and needs renewal.',
             'initializing': 'SSL certificate is being set up.',
           };
@@ -274,7 +275,7 @@ app.get('/admin', withDbAndInit, async (c) => {
         body += `
           <tr>
             <td>${project.name}</td>
-            <td><a href="https://${subdomain}.saasysite.me" target="_blank" class="table-link">${subdomain}</a></td>
+            <td><a href="${c.env.CUSTOM_DOMAIN ? `https://${subdomain}.${c.env.CUSTOM_DOMAIN}` : `https://${subdomain}.workers.dev`}" target="_blank" class="table-link">${subdomain}</a></td>
             <td>${customHostname !== '-' ? `<a href="https://${customHostname}" target="_blank" class="table-link">${customHostname}</a>` : '-'}</td>
             <td class="status-cell">
               <div class="status-row">
@@ -364,7 +365,7 @@ app.get('/admin', withDbAndInit, async (c) => {
   }
   </script>`;
 
-  return c.html(renderPage(body));
+  return c.html(renderPage(body, { customDomain: c.env.CUSTOM_DOMAIN }));
 });
 
 /*

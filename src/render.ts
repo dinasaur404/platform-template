@@ -1212,7 +1212,7 @@ export const BuildWebsitePage = `
       <label for="subdomain">Your URL</label>
       <div id="urlPreview" style="display: flex; align-items: center; gap: 8px;">
         <input type="text" id="subdomain" required placeholder="my-awesome-site" pattern="[a-z0-9-]+" title="Only lowercase letters, numbers, and hyphens" style="flex: 1;">
-        <span style="font-size: 14px; font-weight: 500; color: var(--kumo-muted-foreground);">.saasysite.me</span>
+        <span id="domainSuffix" style="font-size: 14px; font-weight: 500; color: var(--kumo-muted-foreground);"></span>
       </div>
       <small>This will be your website's address</small>
     </div>
@@ -1247,8 +1247,8 @@ export const BuildWebsitePage = `
               </td>
               <td>
                 <div style="display: flex; align-items: center; gap: 8px;">
-                  <span>my.saasysite.me</span>
-                  <button type="button" class="btn-icon" onclick="copyToClipboard('my.saasysite.me', this)" title="Copy target">
+                  <span id="cnameTarget"></span>
+                  <button type="button" class="btn-icon" onclick="copyToClipboard(document.getElementById('cnameTarget').textContent, this)" title="Copy target">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 256 256" fill="currentColor"><path d="M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z"/></svg>
                   </button>
                 </div>
@@ -1766,6 +1766,18 @@ function readEntry(entry, path) {
 
 // Set up event listeners when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
+  
+  // Set dynamic domain values
+  const customDomain = window.CUSTOM_DOMAIN;
+  const domainSuffix = document.getElementById('domainSuffix');
+  const cnameTarget = document.getElementById('cnameTarget');
+  
+  if (domainSuffix) {
+    domainSuffix.textContent = customDomain ? '.' + customDomain : '.workers.dev';
+  }
+  if (cnameTarget) {
+    cnameTarget.textContent = customDomain ? 'my.' + customDomain : '(requires custom domain)';
+  }
 
   // Drag and drop handling
   var dropZone = document.getElementById('dropZone');
@@ -2034,7 +2046,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="url-row">
                   <a href="\${workerUrl}" target="_blank" rel="noopener noreferrer" class="link-btn">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 256 256"><path d="M128,24h0A104,104,0,1,0,232,128,104.12,104.12,0,0,0,128,24Zm88,104a87.61,87.61,0,0,1-3.33,24H174.16a157.44,157.44,0,0,0,0-48h38.51A87.61,87.61,0,0,1,216,128ZM102,168H154a115.11,115.11,0,0,1-26,45A115.27,115.27,0,0,1,102,168Zm-3.9-16a140.84,140.84,0,0,1,0-48h59.88a140.84,140.84,0,0,1,0,48ZM40,128a87.61,87.61,0,0,1,3.33-24H81.84a157.44,157.44,0,0,0,0,48H43.33A87.61,87.61,0,0,1,40,128ZM154,88H102a115.11,115.11,0,0,1,26-45A115.27,115.27,0,0,1,154,88Zm52.33,0H170.71a135.28,135.28,0,0,0-22.3-45.6A88.29,88.29,0,0,1,206.37,88ZM107.59,42.4A135.28,135.28,0,0,0,85.29,88H49.63A88.29,88.29,0,0,1,107.59,42.4ZM49.63,168H85.29a135.28,135.28,0,0,0,22.3,45.6A88.29,88.29,0,0,1,49.63,168Zm98.78,45.6a135.28,135.28,0,0,0,22.3-45.6h35.66A88.29,88.29,0,0,1,148.41,213.6Z"/></svg>
-                    <span>\${subdomain}.saasysite.me</span>
+                    <span>\${workerUrl.replace('https://', '')}</span>
                   </a>
                 </div>
               </div>
