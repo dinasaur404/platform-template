@@ -2067,12 +2067,8 @@ document.addEventListener('DOMContentLoaded', function() {
           
           if (customHostname) {
             checkDomainStatus(subdomain, customHostname, workerUrl);
-          } else {
-            // Open in new tab after 2 seconds
-            setTimeout(() => {
-              window.open(workerUrl, '_blank');
-            }, 2000);
           }
+          // User can click the link to visit their site
           
         } else {
           responseDiv.innerHTML = \`
