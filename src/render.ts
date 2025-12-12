@@ -2068,9 +2068,9 @@ document.addEventListener('DOMContentLoaded', function() {
           if (customHostname) {
             checkDomainStatus(subdomain, customHostname, workerUrl);
           } else {
-            // Redirect after 2 seconds
+            // Open in new tab after 2 seconds
             setTimeout(() => {
-              window.location.href = workerUrl;
+              window.open(workerUrl, '_blank');
             }, 2000);
           }
           
