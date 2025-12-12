@@ -263,9 +263,6 @@ function updateWranglerConfig(config) {
   let content = fs.readFileSync(wranglerPath, 'utf-8');
   let modified = false;
 
-  // Use permanent token if created, otherwise fall back to the deploy-provided API token
-  const apiTokenToUse = config.permanentToken || config.apiToken;
-
   // Add ACCOUNT_ID to vars if not present
   if (config.accountId) {
     if (content.includes('ACCOUNT_ID = "')) {
@@ -279,28 +276,6 @@ function updateWranglerConfig(config) {
     }
     modified = true;
     log(green, `✅ Set ACCOUNT_ID`);
-  }
-
-  // Add DISPATCH_NAMESPACE_API_TOKEN to vars if not present
-  if (apiTokenToUse) {
-    if (content.includes('DISPATCH_NAMESPACE_API_TOKEN = "')) {
-      content = content.replace(/DISPATCH_NAMESPACE_API_TOKEN = ".*"/, `DISPATCH_NAMESPACE_API_TOKEN = "${apiTokenToUse}"`);
-    } else {
-      // Add after ACCOUNT_ID or DISPATCH_NAMESPACE_NAME
-      if (content.includes('ACCOUNT_ID = "')) {
-        content = content.replace(
-          /ACCOUNT_ID = ".*"/,
-          `ACCOUNT_ID = "${config.accountId}"\nDISPATCH_NAMESPACE_API_TOKEN = "${apiTokenToUse}"`
-        );
-      } else {
-        content = content.replace(
-          /DISPATCH_NAMESPACE_NAME = ".*"/,
-          `DISPATCH_NAMESPACE_NAME = "${getDispatchNamespaceFromConfig()}"\nDISPATCH_NAMESPACE_API_TOKEN = "${apiTokenToUse}"`
-        );
-      }
-    }
-    modified = true;
-    log(green, `✅ Set DISPATCH_NAMESPACE_API_TOKEN`);
   }
 
   // Update CUSTOM_DOMAIN if set
@@ -384,35 +359,25 @@ routes = [
 }
 
 async function setWranglerSecrets(config) {
-  if (!config.permanentToken) {
-    log(yellow, '⚠️  No permanent token to set as secret');
+  const apiTokenToUse = config.permanentToken || config.apiToken;
+  
+  if (!apiTokenToUse) {
+    log(yellow, '⚠️  No API token to set as secret');
     return;
   }
 
-  log(blue, '🔐 Setting API token as worker secret...');
+  log(blue, '🔐 Setting secrets via wrangler...');
 
   try {
     // Use wrangler to set the secret
-    execSync(`echo "${config.permanentToken}" | npx wrangler secret put DISPATCH_NAMESPACE_API_TOKEN`, {
+    execSync(`echo "${apiTokenToUse}" | npx wrangler secret put DISPATCH_NAMESPACE_API_TOKEN`, {
       stdio: 'pipe',
       cwd: PROJECT_ROOT
     });
     log(green, '✅ Set DISPATCH_NAMESPACE_API_TOKEN secret');
   } catch (error) {
-    log(yellow, `⚠️  Could not set secret via wrangler: ${error.message}`);
-    log(yellow, '   You may need to set DISPATCH_NAMESPACE_API_TOKEN manually in the dashboard');
-  }
-
-  if (config.accountId) {
-    try {
-      execSync(`echo "${config.accountId}" | npx wrangler secret put ACCOUNT_ID`, {
-        stdio: 'pipe',
-        cwd: PROJECT_ROOT
-      });
-      log(green, '✅ Set ACCOUNT_ID secret');
-    } catch (error) {
-      log(yellow, `⚠️  Could not set ACCOUNT_ID secret: ${error.message}`);
-    }
+    log(yellow, `⚠️  Could not set DISPATCH_NAMESPACE_API_TOKEN secret: ${error.message}`);
+    log(yellow, '   You may need to set it manually in the dashboard');
   }
 }
 
@@ -503,6 +468,15 @@ async function main() {
     const devVarsPath = path.join(PROJECT_ROOT, '.dev.vars');
     fs.writeFileSync(devVarsPath, devVarsContent, 'utf-8');
     log(green, '   ✅ .dev.vars file created');
+  }
+  
+  // Check if this is a postdeploy run (npm_lifecycle_event tells us)
+  const isPostDeploy = process.env.npm_lifecycle_event === 'postdeploy';
+  
+  if (isPostDeploy) {
+    log(blue, '\n🔐 Post-deploy: Setting secrets...');
+    config.permanentToken = config.permanentToken || config.apiToken;
+    await setWranglerSecrets(config);
   }
   
   console.log('');
