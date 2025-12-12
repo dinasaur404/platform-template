@@ -329,8 +329,9 @@ function updateWranglerConfig(config) {
     content = content.replace(/\nroutes = \[[\s\S]*?\]\n/g, '');
     
     const routesSection = `
-# Routes for custom domain (wildcard for user sites)
+# Routes for custom domain
 routes = [
+  { pattern = "${config.customDomain}/*", zone_id = "${config.zoneId}" },
   { pattern = "*.${config.customDomain}/*", zone_id = "${config.zoneId}" }
 ]
 `;
