@@ -21,13 +21,28 @@ Click the **Deploy to Cloudflare** button above. Everything is auto-configured!
 
 ### Optional: Custom Domain
 
-If you want to use your own domain instead of `*.workers.dev`, you can optionally provide:
+If you want to use your own domain instead of `*.workers.dev`:
 
 | Variable | Description |
 |----------|-------------|
 | `CUSTOM_DOMAIN` | Your root domain (e.g., `platform.com`) |
+| `CLOUDFLARE_API_TOKEN` | (Optional) API token with SSL permissions - see below |
 
-All other configuration (API tokens, account ID, zone ID) is automatically detected and provisioned during deployment.
+#### API Token for Custom Domains
+
+To enable **custom hostname support** (letting users connect their own domains), create an API token with SSL permissions. The default deploy token doesn't include these.
+
+1. Go to [API Tokens](https://dash.cloudflare.com/profile/api-tokens)
+2. Click **Create Token**
+3. Use **Custom token** template
+4. Add permissions:
+   - **Zone** → **SSL and Certificates** → **Edit**
+   - **Zone** → **Zone** → **Read**
+5. Set **Zone Resources** to your domain
+6. Create and copy the token
+7. Paste it in the `CLOUDFLARE_API_TOKEN` field during deployment
+
+> **Note:** If you skip this, everything else works - you just won't be able to provision custom hostnames for users automatically.
 
 ---
 
@@ -141,6 +156,7 @@ The admin page (`/admin`) shows all projects. Protect it with [Cloudflare Access
 |---------|----------|
 | "Dispatch namespace not found" | Enable Workers for Platforms: [dash.cloudflare.com/?to=/:account/workers-for-platforms](https://dash.cloudflare.com/?to=/:account/workers-for-platforms) |
 | "Custom domain not working" | Check Zone ID and DNS records are correct |
+| "Custom hostnames require additional setup" | Provide `CLOUDFLARE_API_TOKEN` with SSL permissions during deploy, or add it post-deploy as a secret |
 | "404 on deployed sites" | Ensure uploaded files include `index.html` at the root |
 | Database errors | Visit `/admin` to check status, or `/init` to reset |
 

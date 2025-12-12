@@ -47,10 +47,16 @@ function getVarFromWranglerToml(varName) {
 function getConfig() {
   // Read from environment variables (set by Deploy to Cloudflare flow)
   // CF_API_TOKEN and CF_ACCOUNT_ID are auto-provided by the deploy system
+  // CLOUDFLARE_API_TOKEN is user-provided (optional) with SSL permissions for custom hostnames
   // Also check wrangler.toml for vars set by deploy form
+  
+  const deployToken = process.env.CF_API_TOKEN;
+  const userToken = process.env.CLOUDFLARE_API_TOKEN; // User's token with SSL permissions
+  
   return {
     accountId: process.env.CF_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID || process.env.ACCOUNT_ID,
-    apiToken: process.env.CF_API_TOKEN || process.env.CLOUDFLARE_API_TOKEN || process.env.DISPATCH_NAMESPACE_API_TOKEN,
+    apiToken: deployToken, // Use deploy token for setup operations (namespace creation, etc)
+    userApiToken: userToken, // User's token with SSL permissions for custom hostnames
     customDomain: process.env.CUSTOM_DOMAIN || getVarFromWranglerToml('CUSTOM_DOMAIN'),
     zoneId: process.env.CLOUDFLARE_ZONE_ID || getVarFromWranglerToml('CLOUDFLARE_ZONE_ID'),
     fallbackOrigin: process.env.FALLBACK_ORIGIN || getVarFromWranglerToml('FALLBACK_ORIGIN')
@@ -124,7 +130,9 @@ async function createPermanentToken(config) {
     const permGroupsData = await permGroupsResponse.json();
     
     if (!permGroupsData.success) {
-      log(yellow, '⚠️  Could not fetch permission groups');
+      log(yellow, '⚠️  Could not fetch permission groups - deploy token has limited permissions');
+      log(yellow, '   Custom domains will not work until you add a token with SSL permissions');
+      log(yellow, '   See README for instructions on creating a full-access token');
       return null;
     }
 
@@ -359,25 +367,34 @@ routes = [
 }
 
 async function setWranglerSecrets(config) {
-  const apiTokenToUse = config.permanentToken || config.apiToken;
-  
-  if (!apiTokenToUse) {
-    log(yellow, '⚠️  No API token to set as secret');
-    return;
-  }
-
   log(blue, '🔐 Setting secrets via wrangler...');
 
-  try {
-    // Use wrangler to set the secret
-    execSync(`echo "${apiTokenToUse}" | npx wrangler secret put DISPATCH_NAMESPACE_API_TOKEN`, {
-      stdio: 'pipe',
-      cwd: PROJECT_ROOT
-    });
-    log(green, '✅ Set DISPATCH_NAMESPACE_API_TOKEN secret');
-  } catch (error) {
-    log(yellow, `⚠️  Could not set DISPATCH_NAMESPACE_API_TOKEN secret: ${error.message}`);
-    log(yellow, '   You may need to set it manually in the dashboard');
+  // Set user-provided API token if available (for custom hostnames)
+  if (config.userApiToken) {
+    try {
+      execSync(`echo "${config.userApiToken}" | npx wrangler secret put CLOUDFLARE_API_TOKEN`, {
+        stdio: 'pipe',
+        cwd: PROJECT_ROOT
+      });
+      log(green, '✅ Set CLOUDFLARE_API_TOKEN secret (for custom domains)');
+    } catch (error) {
+      log(yellow, `⚠️  Could not set CLOUDFLARE_API_TOKEN secret: ${error.message}`);
+    }
+  }
+
+  // Set dispatch namespace token
+  const dispatchToken = config.runtimeToken || config.apiToken;
+  if (dispatchToken) {
+    try {
+      execSync(`echo "${dispatchToken}" | npx wrangler secret put DISPATCH_NAMESPACE_API_TOKEN`, {
+        stdio: 'pipe',
+        cwd: PROJECT_ROOT
+      });
+      log(green, '✅ Set DISPATCH_NAMESPACE_API_TOKEN secret');
+    } catch (error) {
+      log(yellow, `⚠️  Could not set DISPATCH_NAMESPACE_API_TOKEN secret: ${error.message}`);
+      log(yellow, '   You may need to set it manually in the dashboard');
+    }
   }
 }
 
@@ -392,7 +409,6 @@ async function main() {
   log(cyan, `   CF_API_TOKEN: ${process.env.CF_API_TOKEN ? 'set' : 'not set'}`);
   log(cyan, `   CF_ACCOUNT_ID: ${process.env.CF_ACCOUNT_ID ? 'set' : 'not set'}`);
   log(cyan, `   CLOUDFLARE_API_TOKEN: ${process.env.CLOUDFLARE_API_TOKEN ? 'set' : 'not set'}`);
-  log(cyan, `   CLOUDFLARE_ACCOUNT_ID: ${process.env.CLOUDFLARE_ACCOUNT_ID ? 'set' : 'not set'}`);
   log(cyan, `   CUSTOM_DOMAIN (env): ${process.env.CUSTOM_DOMAIN || 'not set'}`);
   log(cyan, `   CUSTOM_DOMAIN (toml): ${getVarFromWranglerToml('CUSTOM_DOMAIN') || 'not set'}`);
   console.log('');
@@ -407,9 +423,14 @@ async function main() {
     log(yellow, '   Account ID: (not found)');
   }
   if (config.apiToken) {
-    log(cyan, `   API Token: ${config.apiToken.substring(0, 8)}...`);
+    log(cyan, `   Deploy Token: ${config.apiToken.substring(0, 8)}...`);
   } else {
-    log(yellow, '   API Token: (not found)');
+    log(yellow, '   Deploy Token: (not found)');
+  }
+  if (config.userApiToken) {
+    log(green, `   User API Token: ${config.userApiToken.substring(0, 8)}... (will use for custom domains)`);
+  } else if (config.customDomain) {
+    log(yellow, '   User API Token: (not provided - custom domains may not work)');
   }
   if (config.customDomain) {
     log(cyan, `   Custom Domain: ${config.customDomain}`);
@@ -422,8 +443,13 @@ async function main() {
   const namespaceName = getDispatchNamespaceFromConfig();
   ensureDispatchNamespace(namespaceName);
 
-  // Create permanent API token for runtime use
-  config.permanentToken = await createPermanentToken(config);
+  // Use user-provided API token if available, otherwise try to create one
+  if (config.userApiToken) {
+    log(green, '✅ Using user-provided API token for custom domains');
+  } else {
+    // Try to create permanent API token (may fail if deploy token lacks permissions)
+    config.runtimeToken = await createPermanentToken(config);
+  }
 
   // Auto-detect zone ID if custom domain is set
   if (config.customDomain && config.customDomain !== '' && !config.zoneId) {
@@ -434,17 +460,25 @@ async function main() {
   updateWranglerConfig(config);
 
   // Write secrets to .dev.vars file - wrangler will use these during deploy
-  // Use permanent token if created, otherwise fall back to the deploy-provided API token
-  const apiTokenToUse = config.permanentToken || config.apiToken;
+  // Priority: user-provided token > auto-created token > deploy token
+  const dispatchToken = config.runtimeToken || config.apiToken;
+  const tokenSource = config.userApiToken ? 'user-provided' : (config.runtimeToken ? 'auto-created' : 'deploy');
   
-  if (apiTokenToUse || config.accountId) {
+  if (dispatchToken || config.accountId || config.userApiToken) {
     log(blue, '\n📝 Writing secrets to .dev.vars...');
     
     let devVarsContent = `# Auto-generated by setup script\n`;
     
-    if (apiTokenToUse) {
-      devVarsContent += `DISPATCH_NAMESPACE_API_TOKEN="${apiTokenToUse}"\n`;
-      log(green, `   ✅ DISPATCH_NAMESPACE_API_TOKEN${config.permanentToken ? '' : ' (using deploy token)'}`);
+    // If user provided API token with SSL permissions, store it for custom hostname operations
+    if (config.userApiToken) {
+      devVarsContent += `CLOUDFLARE_API_TOKEN="${config.userApiToken}"\n`;
+      log(green, `   ✅ CLOUDFLARE_API_TOKEN (user-provided, for custom domains)`);
+    }
+    
+    // Set the token for dispatch namespace operations
+    if (dispatchToken) {
+      devVarsContent += `DISPATCH_NAMESPACE_API_TOKEN="${dispatchToken}"\n`;
+      log(green, `   ✅ DISPATCH_NAMESPACE_API_TOKEN (${tokenSource} token)`);
     }
     
     if (config.accountId) {
@@ -475,7 +509,8 @@ async function main() {
   
   if (isPostDeploy) {
     log(blue, '\n🔐 Post-deploy: Setting secrets...');
-    config.permanentToken = config.permanentToken || config.apiToken;
+    // Use the best token we have for runtime
+    config.runtimeToken = config.runtimeToken || config.apiToken;
     await setWranglerSecrets(config);
   }
   

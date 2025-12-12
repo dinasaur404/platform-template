@@ -27,6 +27,9 @@
     "bindings": {
       "CUSTOM_DOMAIN": {
         "description": "(Optional) Your platform's domain, e.g. `myplatform.com`. Leave empty to use workers.dev"
+      },
+      "CLOUDFLARE_API_TOKEN": {
+        "description": "(Optional) API token with **SSL and Certificates Edit** permission for custom domain support. [Create token](https://dash.cloudflare.com/profile/api-tokens)"
       }
     }
   }

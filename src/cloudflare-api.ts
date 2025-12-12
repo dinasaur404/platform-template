@@ -2,11 +2,13 @@
 import type { Env } from './env';
 
 function getAuthHeaders(env: Env): Record<string, string> {
-  // Use DISPATCH_NAMESPACE_API_TOKEN for all Cloudflare API calls
-  // This token is auto-created by setup script with required permissions
-  if (env.DISPATCH_NAMESPACE_API_TOKEN) {
+  // Prefer user-provided API token with SSL permissions
+  // Fall back to dispatch namespace token (may not have SSL permissions)
+  const token = env.CLOUDFLARE_API_TOKEN || env.DISPATCH_NAMESPACE_API_TOKEN;
+  
+  if (token) {
     return {
-      'Authorization': `Bearer ${env.DISPATCH_NAMESPACE_API_TOKEN}`,
+      'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
     };
   }
@@ -14,11 +16,13 @@ function getAuthHeaders(env: Env): Record<string, string> {
 }
 
 function isApiConfigured(env: Env): boolean {
-  const configured = !!(env.CLOUDFLARE_ZONE_ID && env.DISPATCH_NAMESPACE_API_TOKEN);
+  const hasAuth = !!env.CLOUDFLARE_API_TOKEN || !!env.DISPATCH_NAMESPACE_API_TOKEN;
+  const configured = !!(env.CLOUDFLARE_ZONE_ID && hasAuth);
   if (!configured) {
     console.error('Custom hostname API not configured:', {
       hasZoneId: !!env.CLOUDFLARE_ZONE_ID,
-      hasToken: !!env.DISPATCH_NAMESPACE_API_TOKEN
+      hasApiToken: !!env.CLOUDFLARE_API_TOKEN,
+      hasDispatchToken: !!env.DISPATCH_NAMESPACE_API_TOKEN
     });
   }
   return configured;
