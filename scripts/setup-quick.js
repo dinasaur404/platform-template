@@ -507,12 +507,11 @@ async function main() {
     log(green, '   ✅ .dev.vars file created');
   }
   
-  // Check if this is a postdeploy run (npm_lifecycle_event tells us)
-  const isPostDeploy = process.env.npm_lifecycle_event === 'postdeploy';
+  // Set secrets after deploy (when --set-secrets flag is passed)
+  const setSecretsFlag = process.argv.includes('--set-secrets');
   
-  if (isPostDeploy) {
-    log(blue, '\n🔐 Post-deploy: Setting secrets...');
-    // Use the best token we have for runtime
+  if (setSecretsFlag) {
+    log(blue, '\n🔐 Setting secrets...');
     config.runtimeToken = config.runtimeToken || config.apiToken;
     await setWranglerSecrets(config);
   }
