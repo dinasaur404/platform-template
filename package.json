@@ -14,7 +14,7 @@
   "scripts": {
     "dev": "wrangler dev --remote",
     "build": "node scripts/setup-quick.js",
-    "deploy": "node scripts/setup-quick.js && wrangler deploy && node scripts/setup-quick.js --set-secrets",
+    "deploy": "wrangler deploy && node scripts/setup-quick.js --set-secrets",
     "setup": "node scripts/setup.js",
     "setup:quick": "node scripts/setup-quick.js"
   },

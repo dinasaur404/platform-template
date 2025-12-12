@@ -511,8 +511,18 @@ async function main() {
   const setSecretsFlag = process.argv.includes('--set-secrets');
   
   if (setSecretsFlag) {
-    log(blue, '\n🔐 Setting secrets...');
-    config.runtimeToken = config.runtimeToken || config.apiToken;
+    log(blue, '\n🔐 Setting secrets from .dev.vars...');
+    // Read tokens from .dev.vars (saved during build phase)
+    const devVarsPath = path.join(PROJECT_ROOT, '.dev.vars');
+    if (fs.existsSync(devVarsPath)) {
+      const devVarsContent = fs.readFileSync(devVarsPath, 'utf-8');
+      const getVar = (name) => {
+        const match = devVarsContent.match(new RegExp(`${name}="([^"]*)"`));
+        return match ? match[1] : null;
+      };
+      config.userApiToken = config.userApiToken || getVar('CLOUDFLARE_API_TOKEN');
+      config.runtimeToken = config.runtimeToken || getVar('DISPATCH_NAMESPACE_API_TOKEN') || config.apiToken;
+    }
     await setWranglerSecrets(config);
   }
   
