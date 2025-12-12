@@ -84,6 +84,10 @@ export async function getCustomHostnameStatus(env: Env, hostname: string): Promi
     if (!response.ok || !result.success) {
       const errorMsg = result.errors?.[0]?.message || 'API request failed';
       console.error('Custom hostname API error:', errorMsg, result);
+      // Provide user-friendly message for common errors
+      if (errorMsg.includes('Authentication') || errorMsg.includes('authorization') || response.status === 403) {
+        return { status: 'error', verification_errors: ['Custom domains require additional setup. Please contact the platform administrator.'] };
+      }
       return { status: 'error', verification_errors: [errorMsg] };
     }
 
