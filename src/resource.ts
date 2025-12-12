@@ -11,8 +11,18 @@ const MakeHeaders = (env: Env): Record<string, string> => {
       'Authorization': `Bearer ${env.DISPATCH_NAMESPACE_API_TOKEN}`,
     };
   }
+  console.error('DISPATCH_NAMESPACE_API_TOKEN is not set!');
   return {};
 };
+
+// Debug helper to check env vars
+export function checkEnvConfig(env: Env): { ok: boolean; missing: string[] } {
+  const missing: string[] = [];
+  if (!env.ACCOUNT_ID) missing.push('ACCOUNT_ID');
+  if (!env.DISPATCH_NAMESPACE_API_TOKEN) missing.push('DISPATCH_NAMESPACE_API_TOKEN');
+  if (!env.DISPATCH_NAMESPACE_NAME) missing.push('DISPATCH_NAMESPACE_NAME');
+  return { ok: missing.length === 0, missing };
+}
 
 export async function GetScriptsInDispatchNamespace(env: Env) {
   const data = (await (

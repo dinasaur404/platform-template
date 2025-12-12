@@ -11,6 +11,7 @@ import {
   PutScriptInDispatchNamespace,
   PutScriptWithAssetsInDispatchNamespace,
   AssetFile,
+  checkEnvConfig,
 } from './resource';
 import { handleDispatchError, withDb } from './router';
 import { renderPage, BuildTable, BuildWebsitePage } from './render';
@@ -383,6 +384,13 @@ app.get('/init', withDbAndInit, async (c) => {
  */ 
 app.post('/projects', withDbAndInit, async (c) => {
   try {
+    // Check if required env vars are set
+    const envCheck = checkEnvConfig(c.env);
+    if (!envCheck.ok) {
+      console.error('Missing env vars:', envCheck.missing);
+      return c.text(`Server configuration error: Missing ${envCheck.missing.join(', ')}. Please check deployment settings.`, 500);
+    }
+    
     const { name, subdomain, script_content, custom_hostname, assets } = await c.req.json();
     
     // Validate input - either script_content OR assets required
