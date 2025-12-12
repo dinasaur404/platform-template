@@ -366,10 +366,20 @@ async function main() {
   log(blue, '──────────────────────────────────────');
   console.log('');
   
+  // Debug: show what env vars are available
+  log(cyan, '📋 Environment variables available:');
+  log(cyan, `   CF_API_TOKEN: ${process.env.CF_API_TOKEN ? 'set' : 'not set'}`);
+  log(cyan, `   CF_ACCOUNT_ID: ${process.env.CF_ACCOUNT_ID ? 'set' : 'not set'}`);
+  log(cyan, `   CLOUDFLARE_API_TOKEN: ${process.env.CLOUDFLARE_API_TOKEN ? 'set' : 'not set'}`);
+  log(cyan, `   CLOUDFLARE_ACCOUNT_ID: ${process.env.CLOUDFLARE_ACCOUNT_ID ? 'set' : 'not set'}`);
+  log(cyan, `   CUSTOM_DOMAIN (env): ${process.env.CUSTOM_DOMAIN || 'not set'}`);
+  log(cyan, `   CUSTOM_DOMAIN (toml): ${getVarFromWranglerToml('CUSTOM_DOMAIN') || 'not set'}`);
+  console.log('');
+  
   const config = getConfig();
 
   // Log what we found from environment
-  log(cyan, '📋 Configuration detected:');
+  log(cyan, '📋 Configuration resolved:');
   if (config.accountId) {
     log(cyan, `   Account ID: ${config.accountId.substring(0, 8)}...`);
   } else {
