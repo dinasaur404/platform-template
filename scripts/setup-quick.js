@@ -299,7 +299,9 @@ function updateWranglerConfig(config) {
 
   // Add routes if custom domain and zone ID are configured
   if (config.customDomain && config.customDomain !== '' && config.zoneId) {
+    // Remove any existing routes section
     content = content.replace(/\n# Routes for custom domain\nroutes = \[[\s\S]*?\]\n/g, '');
+    content = content.replace(/\nroutes = \[[\s\S]*?\]\n/g, '');
     
     const routesSection = `
 # Routes for custom domain
@@ -309,10 +311,14 @@ routes = [
 ]
 `;
 
-    if (content.includes('[vars]')) {
-      content = content.replace('[vars]', `${routesSection}\n[vars]`);
+    // Insert routes after workers_dev line (top-level config area)
+    if (content.includes('workers_dev = false')) {
+      content = content.replace('workers_dev = false', `workers_dev = false\n${routesSection}`);
+    } else if (content.includes('workers_dev = true')) {
+      content = content.replace('workers_dev = true', `workers_dev = false\n${routesSection}`);
     } else {
-      content += routesSection;
+      // Fallback: add after compatibility_flags or at top
+      content = content.replace(/(compatibility_flags = \[.*?\])/, `$1\n${routesSection}`);
     }
 
     modified = true;
