@@ -14,7 +14,14 @@ function getAuthHeaders(env: Env): Record<string, string> {
 }
 
 function isApiConfigured(env: Env): boolean {
-  return !!(env.CLOUDFLARE_ZONE_ID && env.DISPATCH_NAMESPACE_API_TOKEN);
+  const configured = !!(env.CLOUDFLARE_ZONE_ID && env.DISPATCH_NAMESPACE_API_TOKEN);
+  if (!configured) {
+    console.error('Custom hostname API not configured:', {
+      hasZoneId: !!env.CLOUDFLARE_ZONE_ID,
+      hasToken: !!env.DISPATCH_NAMESPACE_API_TOKEN
+    });
+  }
+  return configured;
 }
 
 export async function createCustomHostname(env: Env, hostname: string): Promise<boolean> {
@@ -72,10 +79,12 @@ export async function getCustomHostnameStatus(env: Env, hostname: string): Promi
       headers: getAuthHeaders(env),
     });
 
-    const result = await response.json();
+    const result = await response.json() as { success: boolean; result?: any[]; errors?: Array<{ message: string }> };
     
-    if (!response.ok) {
-      return { status: 'error', verification_errors: ['API request failed'] };
+    if (!response.ok || !result.success) {
+      const errorMsg = result.errors?.[0]?.message || 'API request failed';
+      console.error('Custom hostname API error:', errorMsg, result);
+      return { status: 'error', verification_errors: [errorMsg] };
     }
 
     if (!result.result || result.result.length === 0) {
