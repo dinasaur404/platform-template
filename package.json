@@ -9,7 +9,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240329.0",
     "typescript": "^5.0.0",
-    "wrangler": "^3.99.0"
+    "wrangler": "^4.54.0"
   },
   "scripts": {
     "dev": "wrangler dev --remote",
