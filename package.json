@@ -1,26 +1,39 @@
 {
   "name": "workers-for-platforms-template",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "A template for building website hosting platforms using Cloudflare Workers for Platforms. Deploy static sites and custom Workers code through a simple web interface.",
-  "license": "Apache-2.0",
+  "license": "ISC",
   "engines": {
-    "node": ">=18"
-  },
-  "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240329.0",
-    "typescript": "^5.0.0",
-    "wrangler": "^4.54.0"
+    "node": ">=22"
   },
   "scripts": {
-    "dev": "wrangler dev --remote",
+    "dev": "vite dev",
+    "format": "biome format --write",
+    "check": "biome check && tsc --noEmit",
     "build": "node scripts/setup-quick.js",
     "deploy": "wrangler deploy && node scripts/setup-quick.js --set-secrets",
     "setup": "node scripts/setup.js",
-    "setup:quick": "node scripts/setup-quick.js"
+    "setup:quick": "node scripts/setup-quick.js",
+    "types": "wrangler types env.d.ts --include-runtime false --strict-vars false"
   },
   "dependencies": {
-    "hono": "^4.2.1",
-    "workers-qb": "^0.1.1"
+    "hono": "^4.11.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "workers-qb": "^1.11.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.8",
+    "@cloudflare/vite-plugin": "^1.17.1",
+    "@cloudflare/workers-types": "^4.20251213.0",
+    "@types/node": "^25.0.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.2",
+    "dotenv": "^17.2.3",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.7",
+    "wrangler": "^4.54.0"
   },
   "cloudflare": {
     "bindings": {

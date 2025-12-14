@@ -1,86 +1,74 @@
 // Copyright (c) 2022 Cloudflare, Inc.
 // Licensed under the APACHE LICENSE, VERSION 2.0 license found in the LICENSE file or at http://www.apache.org/licenses/LICENSE-2.0
 
-import { Hono } from 'hono';
+import { Hono, type MiddlewareHandler } from 'hono';
 
-import { FetchTable, Initialize, CreateProject, GetProjectBySubdomain, GetProjectByCustomHostname } from './db';
-import type { Env } from './env';
 import {
+  Initialize,
+  CreateProject,
+  GetProjectBySubdomain,
+  GetProjectByCustomHostname,
+  autoInitializeDatabase,
+  GetAllProjects
+} from './db';
+
+import {
+  type AssetFile,
   DeleteScriptInDispatchNamespace,
   GetScriptsInDispatchNamespace,
   PutScriptInDispatchNamespace,
-  PutScriptWithAssetsInDispatchNamespace,
-  AssetFile,
-  checkEnvConfig,
+  PutScriptWithAssetsInDispatchNamespace
 } from './resource';
-import { handleDispatchError, withDb } from './router';
-import { renderPage, BuildTable, BuildWebsitePage } from './render';
-import { Project } from './types';
-import { createCustomHostname, getCustomHostnameStatus } from './cloudflare-api';
-import { D1QB } from 'workers-qb';
+import { renderPage, BuildWebsitePage, BuildTable } from './render';
 
-const app = new Hono<{ Bindings: Env }>();
+import {
+  createCustomHostname,
+  getCustomHostnameStatus
+} from './cloudflare-api';
 
-// Auto-initialization flag - tracks if DB has been initialized
-let isInitialized = false;
+import { env } from 'cloudflare:workers';
+import type { Project } from './types';
 
-/**
- * Automatically initialize database schema on first request
- */
-async function autoInitializeDatabase(db: D1QB): Promise<void> {
-  if (isInitialized) {
-    return; // Already initialized in this worker instance
+// Debug helper to check env vars
+function checkEnvConfig() {
+  const missing: string[] = [];
+  const requiredEnvVars = [
+    'CLOUDFLARE_ACCOUNT_ID',
+    'DISPATCH_NAMESPACE_API_TOKEN',
+    'DISPATCH_NAMESPACE_NAME'
+  ];
+  for (const envVar of requiredEnvVars) {
+    if (!env[envVar as keyof typeof env]) missing.push(envVar);
   }
-  
-  try {
-    // Check if projects table exists by trying to query it
-    const tableCheck = await db.fetchOne({
-      tableName: 'sqlite_master',
-      fields: 'name',
-      where: {
-        conditions: 'type = ? AND name = ?',
-        params: ['table', 'projects']
-      }
-    });
-    
-    if (!tableCheck.results) {
-      // Create projects table
-      await db.createTable({
-        tableName: 'projects',
-        schema: 'id TEXT PRIMARY KEY, name TEXT NOT NULL, subdomain TEXT UNIQUE NOT NULL, custom_hostname TEXT, script_content TEXT NOT NULL, created_on TEXT NOT NULL, modified_on TEXT NOT NULL',
-        ifNotExists: true
-      });
-    }
-    
-    isInitialized = true;
-    
-  } catch (error) {
-    // Don't throw - let the app continue, it might work anyway
-    // Set flag to true to avoid repeated attempts
-    isInitialized = true;
+  if (missing.length > 0) {
+    console.error('Missing env vars:', missing);
+    throw new Error(
+      `Server configuration error: Missing ${missing.join(
+        ', '
+      )}. Please check deployment settings.`
+    );
   }
 }
 
-// Enhanced withDb middleware that includes auto-initialization
-const withDbAndInit = async (c: any, next: any) => {
+checkEnvConfig();
+
+// Middleware that auto-initializes the database
+const withDbAndInit: MiddlewareHandler = async (_c, next) => {
   // First apply the original withDb middleware
-  await withDb(c, async () => {
-    // Auto-initialize database on first request
-    if (!isInitialized && c.var.db) {
-      await autoInitializeDatabase(c.var.db);
-    }
-    await next();
-  });
+  await autoInitializeDatabase();
+  await next();
 };
+
+const app = new Hono();
 
 // Project routing middleware - handles both subdomains and custom hostnames
 app.use('*', withDbAndInit, async (c, next) => {
-  const customDomain = c.env.CUSTOM_DOMAIN;
+  const customDomain = env.CUSTOM_DOMAIN;
   const url = new URL(c.req.url);
   const host = url.hostname;
   const path = url.pathname;
 
-  let project: any = null;
+  let project: Project | null = null;
 
   if (customDomain) {
     // If visiting the root domain, serve the builder UI
@@ -88,37 +76,46 @@ app.use('*', withDbAndInit, async (c, next) => {
       await next();
       return;
     }
-    
+
     // Check if this is a subdomain of our custom domain
     if (host.endsWith(`.${customDomain}`)) {
       const subdomain = host.replace(`.${customDomain}`, '');
-      
+
       // Look up project by subdomain
-      project = await GetProjectBySubdomain(c.var.db, subdomain);
+      project = await GetProjectBySubdomain(subdomain);
     } else {
       // Check if this is a custom hostname (vanity domain)
-      project = await GetProjectByCustomHostname(c.var.db, host);
+      project = await GetProjectByCustomHostname(host);
     }
   } else {
     // Workers.dev routing: workername.workers.dev/projectname
     if (path.startsWith('/') && path.length > 1) {
       const subdomain = path.substring(1).split('/')[0];
-      
+
       // Skip common paths
-      if (['admin', 'projects', 'upload', 'init', 'dispatch', 'favicon.ico'].includes(subdomain)) {
+      if (
+        [
+          'admin',
+          'projects',
+          'upload',
+          'init',
+          'dispatch',
+          'favicon.ico'
+        ].includes(subdomain)
+      ) {
         await next();
         return;
       }
-      
+
       // Look up project by subdomain
-      project = await GetProjectBySubdomain(c.var.db, subdomain);
+      project = await GetProjectBySubdomain(subdomain);
     }
   }
 
   if (project) {
     try {
       let requestToForward = c.req.raw;
-      
+
       // For workers.dev, strip the project path
       if (!customDomain || !host.endsWith(`.${customDomain}`)) {
         const subdomain = path.substring(1).split('/')[0];
@@ -126,19 +123,22 @@ app.use('*', withDbAndInit, async (c, next) => {
         newUrl.pathname = path.substring(subdomain.length + 1) || '/';
         requestToForward = new Request(newUrl.toString(), {
           method: c.req.method,
-          headers: c.req.headers,
-          body: c.req.body
+          headers: c.req.raw.headers,
+          body: c.req.raw.body
         });
       }
 
       // Deploy the project script to the dispatch namespace if it doesn't exist
-      const worker = c.env.dispatcher.get(project.subdomain);
+      const worker = env.dispatcher.get(project.subdomain);
       return await worker.fetch(requestToForward);
     } catch (e) {
       // If worker doesn't exist, deploy it first
-      await PutScriptInDispatchNamespace(c.env, project.subdomain, project.script_content);
-      const worker = c.env.dispatcher.get(project.subdomain);
-      
+      await PutScriptInDispatchNamespace(
+        project.subdomain,
+        project.script_content
+      );
+      const worker = env.dispatcher.get(project.subdomain);
+
       let requestToForward = c.req.raw;
       if (!customDomain || !host.endsWith(`.${customDomain}`)) {
         const subdomain = path.substring(1).split('/')[0];
@@ -146,34 +146,30 @@ app.use('*', withDbAndInit, async (c, next) => {
         newUrl.pathname = path.substring(subdomain.length + 1) || '/';
         requestToForward = new Request(newUrl.toString(), {
           method: c.req.method,
-          headers: c.req.headers,
-          body: c.req.body
+          headers: c.req.raw.headers,
+          body: c.req.raw.body
         });
       }
-      
+
       return await worker.fetch(requestToForward);
     }
   }
-  
-  await next();
-});
 
-app.get('/favicon.ico', () => {
-  return new Response();
+  await next();
 });
 
 /*
  * Main page - Build a website interface
  */
 app.get('/', (c) => {
-  const customDomain = c.env.CUSTOM_DOMAIN;
+  const customDomain = env.CUSTOM_DOMAIN;
   return c.html(renderPage(BuildWebsitePage, { customDomain }));
 });
 
 /*
  * Admin page - For debugging/management (hidden)
  */
-app.get('/admin', withDbAndInit, async (c) => {
+app.get('/admin', async (c) => {
   let body = `
     <div class="form-container">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
@@ -190,10 +186,10 @@ app.get('/admin', withDbAndInit, async (c) => {
       <div class="success-card-label" style="margin-top: 24px;">Projects</div>`;
 
   /*
-    * DB data with custom hostname status
-    */
+   * DB data with custom hostname status
+   */
   try {
-    const projects = await FetchTable(c.var.db, 'projects') as Project[];
+    const projects = await GetAllProjects();
     if (projects && projects.length > 0) {
       body += `
         <div class="dataContainer">
@@ -206,7 +202,7 @@ app.get('/admin', withDbAndInit, async (c) => {
               <th>SSL Status</th>
               <th>Actions</th>
             </tr>`;
-      
+
       for (const project of projects) {
         const subdomain = project.subdomain;
         const customHostname = project.custom_hostname || '-';
@@ -215,10 +211,12 @@ app.get('/admin', withDbAndInit, async (c) => {
         let hostnameErrors: string[] = [];
         let sslErrors: string[] = [];
         let sslMethod = '';
-        
+
         if (project.custom_hostname) {
           try {
-            const status = await getCustomHostnameStatus(c.env, project.custom_hostname);
+            const status = await getCustomHostnameStatus(
+              project.custom_hostname
+            );
             hostnameStatus = status.status;
             sslStatus = status.ssl?.status || '-';
             hostnameErrors = status.verification_errors || [];
@@ -228,21 +226,51 @@ app.get('/admin', withDbAndInit, async (c) => {
             hostnameStatus = 'error';
           }
         }
-        
+
         const statusBadge = (status: string) => {
-          if (status === 'active') return `<span class="status-badge status-active">Active</span>`;
-          if (status === 'pending' || status === 'pending_validation' || status === 'pending_issuance' || status === 'pending_deployment') return `<span class="status-badge status-pending">${status.replace(/_/g, ' ')}</span>`;
-          if (status === 'error' || status === 'deleted' || status === 'validation_timed_out' || status === 'expired') return `<span class="status-badge status-error">${status.replace(/_/g, ' ')}</span>`;
+          if (status === 'active')
+            return `<span class="status-badge status-active">Active</span>`;
+          if (
+            status === 'pending' ||
+            status === 'pending_validation' ||
+            status === 'pending_issuance' ||
+            status === 'pending_deployment'
+          )
+            return `<span class="status-badge status-pending">${status.replace(
+              /_/g,
+              ' '
+            )}</span>`;
+          if (
+            status === 'error' ||
+            status === 'deleted' ||
+            status === 'validation_timed_out' ||
+            status === 'expired'
+          )
+            return `<span class="status-badge status-error">${status.replace(
+              /_/g,
+              ' '
+            )}</span>`;
           if (status === '-') return '-';
-          return `<span class="status-badge status-pending">${status.replace(/_/g, ' ')}</span>`;
+          return `<span class="status-badge status-pending">${status.replace(
+            /_/g,
+            ' '
+          )}</span>`;
         };
-        
+
+        const fallbackOrigin =
+          env.FALLBACK_ORIGIN ||
+          (env.CUSTOM_DOMAIN
+            ? `my.${env.CUSTOM_DOMAIN}`
+            : 'your-platform-domain');
+
         // Helper to get user-friendly error message
         const getFriendlyError = (errors: string[]) => {
           const rawError = errors.join(' ').toLowerCase();
-          
-          const fallbackOrigin = c.env.FALLBACK_ORIGIN || (c.env.CUSTOM_DOMAIN ? `my.${c.env.CUSTOM_DOMAIN}` : 'your-platform-domain');
-          if (rawError.includes('a or aaaa records') || rawError.includes('ownership verification')) {
+
+          if (
+            rawError.includes('a or aaaa records') ||
+            rawError.includes('ownership verification')
+          ) {
             return `Your domain is not pointing to our servers. Add a CNAME record pointing to <strong>${fallbackOrigin}</strong> and wait for DNS propagation (can take up to 24 hours).`;
           }
           if (rawError.includes('cname') && rawError.includes('not found')) {
@@ -251,55 +279,97 @@ app.get('/admin', withDbAndInit, async (c) => {
           if (rawError.includes('timeout') || rawError.includes('timed out')) {
             return 'Verification timed out. Please check your DNS settings and try again.';
           }
-          
+
           // Return original if no match
           return errors.join('<br>');
         };
-        
+
         // Helper to get user-friendly SSL status message
         const getSSLMessage = (status: string, method: string) => {
           const messages: Record<string, string> = {
-            'pending_validation': 'Waiting for SSL certificate validation. This happens automatically once DNS is verified.',
-            'pending_issuance': 'SSL certificate is being issued. This usually takes a few minutes.',
-            'pending_deployment': 'SSL certificate is being deployed to edge servers.',
-            'validation_timed_out': `SSL validation timed out. Make sure your domain points to <strong>${fallbackOrigin}</strong> and click refresh.`,
-            'expired': 'SSL certificate has expired and needs renewal.',
-            'initializing': 'SSL certificate is being set up.',
+            pending_validation:
+              'Waiting for SSL certificate validation. This happens automatically once DNS is verified.',
+            pending_issuance:
+              'SSL certificate is being issued. This usually takes a few minutes.',
+            pending_deployment:
+              'SSL certificate is being deployed to edge servers.',
+            validation_timed_out: `SSL validation timed out. Make sure your domain points to <strong>${fallbackOrigin}</strong> and click refresh.`,
+            expired: 'SSL certificate has expired and needs renewal.',
+            initializing: 'SSL certificate is being set up.'
           };
           return messages[status] || '';
         };
-        
-        const hasHostnameErrors = hostnameErrors.length > 0 && hostnameStatus !== 'active';
-        const hasSSLDetails = (sslStatus !== 'active' && sslStatus !== '-');
+
+        const hasHostnameErrors =
+          hostnameErrors.length > 0 && hostnameStatus !== 'active';
+        const hasSSLDetails = sslStatus !== 'active' && sslStatus !== '-';
         const rowId = `row-${subdomain}`;
-        
+
         body += `
           <tr>
             <td>${project.name}</td>
-            <td><a href="${c.env.CUSTOM_DOMAIN ? `https://${subdomain}.${c.env.CUSTOM_DOMAIN}` : `https://${subdomain}.workers.dev`}" target="_blank" class="table-link">${subdomain}</a></td>
-            <td>${customHostname !== '-' ? `<a href="https://${customHostname}" target="_blank" class="table-link">${customHostname}</a>` : '-'}</td>
+            <td><a href="${
+              env.CUSTOM_DOMAIN
+                ? `https://${subdomain}.${env.CUSTOM_DOMAIN}`
+                : `https://${subdomain}.workers.dev`
+            }" target="_blank" class="table-link">${subdomain}</a></td>
+            <td>${
+              customHostname !== '-'
+                ? `<a href="https://${customHostname}" target="_blank" class="table-link">${customHostname}</a>`
+                : '-'
+            }</td>
             <td class="status-cell">
               <div class="status-row">
                 ${statusBadge(hostnameStatus)}
-                ${hasHostnameErrors ? `<button type="button" class="btn-icon" onclick="toggleDetails('${rowId}-hostname')" title="Show details"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 256 256"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></button>` : ''}
+                ${
+                  hasHostnameErrors
+                    ? `<button type="button" class="btn-icon" onclick="toggleDetails('${rowId}-hostname')" title="Show details"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 256 256"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></button>`
+                    : ''
+                }
               </div>
-              ${hasHostnameErrors ? `<div id="${rowId}-hostname" class="status-details error" style="display: none;"><div class="status-details-item">${getFriendlyError(hostnameErrors)}</div></div>` : ''}
+              ${
+                hasHostnameErrors
+                  ? `<div id="${rowId}-hostname" class="status-details error" style="display: none;"><div class="status-details-item">${getFriendlyError(
+                      hostnameErrors
+                    )}</div></div>`
+                  : ''
+              }
             </td>
             <td class="status-cell">
               <div class="status-row">
                 ${statusBadge(sslStatus)}
-                ${hasSSLDetails ? `<button type="button" class="btn-icon" onclick="toggleDetails('${rowId}-ssl')" title="Show details"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 256 256"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></button>` : ''}
+                ${
+                  hasSSLDetails
+                    ? `<button type="button" class="btn-icon" onclick="toggleDetails('${rowId}-ssl')" title="Show details"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 256 256"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></button>`
+                    : ''
+                }
               </div>
-              ${hasSSLDetails ? `<div id="${rowId}-ssl" class="status-details${sslStatus === 'validation_timed_out' || sslStatus === 'expired' ? ' error' : ''}" style="display: none;">
-                <div class="status-details-item">${getSSLMessage(sslStatus, sslMethod) || `Status: ${sslStatus.replace(/_/g, ' ')}`}</div>
-              </div>` : ''}
+              ${
+                hasSSLDetails
+                  ? `<div id="${rowId}-ssl" class="status-details${
+                      sslStatus === 'validation_timed_out' ||
+                      sslStatus === 'expired'
+                        ? ' error'
+                        : ''
+                    }" style="display: none;">
+                <div class="status-details-item">${
+                  getSSLMessage(sslStatus, sslMethod) ||
+                  `Status: ${sslStatus.replace(/_/g, ' ')}`
+                }</div>
+              </div>`
+                  : ''
+              }
             </td>
             <td>
-              ${customHostname !== '-' ? `<button type="button" class="btn-icon" onclick="refreshStatus('${subdomain}')" title="Refresh status" id="refresh-${subdomain}"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 256 256"><path d="M240,56v48a8,8,0,0,1-8,8H184a8,8,0,0,1,0-16H211.4L184.81,71.64A81.59,81.59,0,0,0,46.37,90.32a8,8,0,1,1-14.54-6.64A97.49,97.49,0,0,1,128,32a98.33,98.33,0,0,1,69.07,28.94L224,84.07V56a8,8,0,0,1,16,0Zm-32.16,109.68a81.65,81.65,0,0,1-138.45,18.68L44.6,160H72a8,8,0,0,0,0-16H24a8,8,0,0,0-8,8v48a8,8,0,0,0,16,0V171.93l26.94,24.13A97.51,97.51,0,0,0,225.54,172.32a8,8,0,0,0-14.54-6.64Z"/></svg></button>` : '-'}
+              ${
+                customHostname !== '-'
+                  ? `<button type="button" class="btn-icon" onclick="refreshStatus('${subdomain}')" title="Refresh status" id="refresh-${subdomain}"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 256 256"><path d="M240,56v48a8,8,0,0,1-8,8H184a8,8,0,0,1,0-16H211.4L184.81,71.64A81.59,81.59,0,0,0,46.37,90.32a8,8,0,1,1-14.54-6.64A97.49,97.49,0,0,1,128,32a98.33,98.33,0,0,1,69.07,28.94L224,84.07V56a8,8,0,0,1,16,0Zm-32.16,109.68a81.65,81.65,0,0,1-138.45,18.68L44.6,160H72a8,8,0,0,0,0-16H24a8,8,0,0,0-8,8v48a8,8,0,0,0,16,0V171.93l26.94,24.13A97.51,97.51,0,0,0,225.54,172.32a8,8,0,0,0-14.54-6.64Z"/></svg></button>`
+                  : '-'
+              }
             </td>
           </tr>`;
       }
-      
+
       body += `</table></div>`;
     } else {
       body += `
@@ -317,17 +387,17 @@ app.get('/admin', withDbAndInit, async (c) => {
   }
 
   /*
-    * Dispatch Namespace data - show only relevant fields
-    */
+   * Dispatch Namespace data - show only relevant fields
+   */
   try {
-    const scripts = await GetScriptsInDispatchNamespace(c.env);
-    body += `<div class="success-card-label" style="margin-top: 24px;">Dispatch Namespace: ${c.env.DISPATCH_NAMESPACE_NAME}</div>`;
+    const scripts = await GetScriptsInDispatchNamespace();
+    body += `<div class="success-card-label" style="margin-top: 24px;">Dispatch Namespace: ${env.DISPATCH_NAMESPACE_NAME}</div>`;
     if (scripts && scripts.length > 0) {
       // Filter to only show relevant fields
-      const filteredScripts = scripts.map((script: any) => ({
+      const filteredScripts = scripts.map((script) => ({
         id: script.id,
         created_on: script.created_on,
-        modified_on: script.modified_on,
+        modified_on: script.modified_on
       }));
       body += BuildTable('scripts', filteredScripts);
     } else {
@@ -337,12 +407,12 @@ app.get('/admin', withDbAndInit, async (c) => {
           <p>No scripts deployed yet.</p>
         </div>`;
     }
-  } catch (e) {
+  } catch (_e) {
     body += `
       <div class="success-card-label" style="margin-top: 24px;">Dispatch Namespace</div>
       <div class="banner banner-warning">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 256 256"><path d="M236.8,188.09,149.35,36.22h0a24.76,24.76,0,0,0-42.7,0L19.2,188.09a23.51,23.51,0,0,0,0,23.72A24.35,24.35,0,0,0,40.55,224h174.9a24.35,24.35,0,0,0,21.33-12.19A23.51,23.51,0,0,0,236.8,188.09ZM222.93,203.8a8.5,8.5,0,0,1-7.48,4.2H40.55a8.5,8.5,0,0,1-7.48-4.2,7.59,7.59,0,0,1,0-7.72L120.52,44.21a8.75,8.75,0,0,1,15,0l87.45,151.87A7.59,7.59,0,0,1,222.93,203.8Z"/></svg>
-        <p>Dispatch namespace "${c.env.DISPATCH_NAMESPACE_NAME}" was not found.</p>
+        <p>Dispatch namespace "${env.DISPATCH_NAMESPACE_NAME}" was not found.</p>
       </div>`;
   }
 
@@ -366,102 +436,127 @@ app.get('/admin', withDbAndInit, async (c) => {
   }
   </script>`;
 
-  return c.html(renderPage(body, { customDomain: c.env.CUSTOM_DOMAIN }));
+  return c.html(renderPage(body, { customDomain: env.CUSTOM_DOMAIN }));
 });
 
 /*
  * Initialize example data (now optional since auto-init handles schema)
  */
-app.get('/init', withDbAndInit, async (c) => {
-  const scripts = await GetScriptsInDispatchNamespace(c.env);
-  await Promise.all(scripts.map(async (script) => DeleteScriptInDispatchNamespace(c.env, script.id)));
-  await Initialize(c.var.db);
+app.get('/init', async (c) => {
+  const scripts = await GetScriptsInDispatchNamespace();
+  await Promise.all(
+    scripts.map(async (script) => DeleteScriptInDispatchNamespace(script.id))
+  );
+  await Initialize();
   return Response.redirect(c.req.url.replace('/init', ''));
 });
 
 /*
  * Create a new project
- */ 
-app.post('/projects', withDbAndInit, async (c) => {
+ */
+app.post('/projects', async (c) => {
   try {
     // Check if required env vars are set
-    const envCheck = checkEnvConfig(c.env);
-    if (!envCheck.ok) {
-      console.error('Missing env vars:', envCheck.missing);
-      return c.text(`Server configuration error: Missing ${envCheck.missing.join(', ')}. Please check deployment settings.`, 500);
-    }
-    
-    const { name, subdomain, script_content, custom_hostname, assets } = await c.req.json();
-    
+
+    const { name, subdomain, script_content, custom_hostname, assets } =
+      await c.req.json();
+
     // Validate input - either script_content OR assets required
     if (!name || !subdomain) {
       return c.text('Missing required fields: name, subdomain', 400);
     }
-    
+
     if (!script_content && (!assets || assets.length === 0)) {
       return c.text('Missing required fields: script_content or assets', 400);
     }
-    
+
     // Validate subdomain format
     if (!/^[a-z0-9-]+$/.test(subdomain)) {
-      return c.text('Subdomain must only contain lowercase letters, numbers, and hyphens', 400);
+      return c.text(
+        'Subdomain must only contain lowercase letters, numbers, and hyphens',
+        400
+      );
     }
-    
+
     // Check if subdomain already exists
-    const existingProject = await GetProjectBySubdomain(c.var.db, subdomain);
+    const existingProject = await GetProjectBySubdomain(subdomain);
     if (existingProject) {
-      return c.text('This URL is already taken. Please choose a different name.', 409);
+      return c.text(
+        'This URL is already taken. Please choose a different name.',
+        409
+      );
     }
-    
+
     // Check if custom hostname already exists
     if (custom_hostname) {
-      const existingCustomHostname = await GetProjectByCustomHostname(c.var.db, custom_hostname);
+      const existingCustomHostname =
+        await GetProjectByCustomHostname(custom_hostname);
       if (existingCustomHostname) {
         return c.text('This domain is already active on the platform', 409);
       }
     }
-    
+
     // Deploy based on whether we have assets or just script
     let scriptPlaceholder: string;
-    
+
     if (assets && assets.length > 0) {
       // Validate assets have content
-      const validAssets = assets.filter((a: AssetFile) => a.path && a.content && a.content.length > 0);
+      const validAssets = assets.filter(
+        (a: AssetFile) => a.path && a.content && a.content.length > 0
+      );
       if (validAssets.length === 0) {
-        return c.text('No valid files found. Files may be empty or unsupported.', 400);
+        return c.text(
+          'No valid files found. Files may be empty or unsupported.',
+          400
+        );
       }
-      
+
       // Check for index.html
       const hasIndex = validAssets.some((a: AssetFile) => {
         const p = a.path.toLowerCase();
         return p === 'index.html' || p.endsWith('/index.html');
       });
-      
+
       if (!hasIndex) {
-        const samplePaths = validAssets.slice(0, 5).map((a: AssetFile) => a.path).join(', ');
-        return c.text(`No index.html found. Your site needs an index.html file. Found: ${samplePaths}${validAssets.length > 5 ? '...' : ''}`, 400);
+        const samplePaths = validAssets
+          .slice(0, 5)
+          .map((a: AssetFile) => a.path)
+          .join(', ');
+        return c.text(
+          `No index.html found. Your site needs an index.html file. Found: ${samplePaths}${
+            validAssets.length > 5 ? '...' : ''
+          }`,
+          400
+        );
       }
-      
-      const deployResult = await PutScriptWithAssetsInDispatchNamespace(c.env, subdomain, validAssets as AssetFile[]);
-      
+
+      const deployResult = await PutScriptWithAssetsInDispatchNamespace(
+        subdomain,
+        validAssets as AssetFile[]
+      );
+
       if (!deployResult.success) {
         return c.text(`Failed to deploy website: ${deployResult.error}`, 500);
       }
-      
+
       scriptPlaceholder = `/* Static site with ${validAssets.length} assets deployed via Assets API */`;
     } else {
       // Deploy regular script
-      const deployResult = await PutScriptInDispatchNamespace(c.env, subdomain, script_content);
+      const deployResult = await PutScriptInDispatchNamespace(
+        subdomain,
+        script_content
+      );
       if (!deployResult.ok) {
         return c.text('Failed to deploy website. Please try again.', 500);
       }
-      
+
       // Store placeholder for large scripts
-      scriptPlaceholder = script_content.length > 1000 
-        ? `/* Script deployed to dispatch namespace - ${script_content.length} bytes */` 
-        : script_content;
+      scriptPlaceholder =
+        script_content.length > 1000
+          ? `/* Script deployed to dispatch namespace - ${script_content.length} bytes */`
+          : script_content;
     }
-    
+
     const project: Project = {
       id: `project-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       name,
@@ -469,20 +564,21 @@ app.post('/projects', withDbAndInit, async (c) => {
       custom_hostname: custom_hostname || null,
       script_content: scriptPlaceholder,
       created_on: new Date().toISOString(),
-      modified_on: new Date().toISOString(),
+      modified_on: new Date().toISOString()
     };
-    
+
     // Save to database
-    await CreateProject(c.var.db, project);
-    
+    await CreateProject(project);
+
     // Create custom hostname if provided
     if (custom_hostname) {
-      await createCustomHostname(c.env, custom_hostname);
+      await createCustomHostname(custom_hostname);
     }
-    
+
     return c.text('Project created successfully', 201);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
     console.error('POST /projects error:', errorMessage, error);
     return c.text(`Internal server error: ${errorMessage}`, 500);
   }
@@ -491,42 +587,47 @@ app.post('/projects', withDbAndInit, async (c) => {
 /*
  * Check custom domain status
  */
-app.get('/projects/:subdomain/custom-domain-status', withDbAndInit, async (c) => {
+app.get('/projects/:subdomain/custom-domain-status', async (c) => {
   try {
     const subdomain = c.req.param('subdomain');
-    
+
     // Get project by subdomain
-    const project = await GetProjectBySubdomain(c.var.db, subdomain);
+    const project = await GetProjectBySubdomain(subdomain);
     if (!project) {
       return c.text('Project not found', 404);
     }
-    
+
     // Check if project has custom hostname
     if (!project.custom_hostname) {
       return c.json({
         has_custom_domain: false,
-        worker_url: c.env.CUSTOM_DOMAIN 
-          ? `https://${subdomain}.${c.env.CUSTOM_DOMAIN}`
-          : `https://${c.env.WORKERS_DEV_SUBDOMAIN || 'my-worker'}.workers.dev/${subdomain}`
+        worker_url: env.CUSTOM_DOMAIN
+          ? `https://${subdomain}.${env.CUSTOM_DOMAIN}`
+          : `https://${
+              env.WORKERS_DEV_SUBDOMAIN || 'my-worker'
+            }.workers.dev/${subdomain}`
       });
     }
-    
+
     // Get custom hostname status from Cloudflare
-    const status = await getCustomHostnameStatus(c.env, project.custom_hostname);
-    
+    const status = await getCustomHostnameStatus(project.custom_hostname);
+
     return c.json({
       has_custom_domain: true,
       custom_domain: project.custom_hostname,
       status: status.status,
       ssl_status: status.ssl?.status,
       verification_errors: status.verification_errors || [],
-      worker_url: c.env.CUSTOM_DOMAIN 
-        ? `https://${subdomain}.${c.env.CUSTOM_DOMAIN}`
-        : `https://${c.env.WORKERS_DEV_SUBDOMAIN || 'my-worker'}.workers.dev/${subdomain}`,
+      worker_url: env.CUSTOM_DOMAIN
+        ? `https://${subdomain}.${env.CUSTOM_DOMAIN}`
+        : `https://${
+            env.WORKERS_DEV_SUBDOMAIN || 'my-worker'
+          }.workers.dev/${subdomain}`,
       is_active: status.status === 'active'
     });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
     return c.text(`Internal server error: ${errorMessage}`, 500);
   }
 });

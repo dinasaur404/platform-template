@@ -1,0 +1,56 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "workers-platform-template",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-12-12",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Smart Placement
+  "placement": { "mode": "smart" },
+
+  // Observability
+  "observability": {
+    "logs": {
+      "enabled": true
+    }
+  },
+
+  // Set to true to use workers.dev subdomain
+  "workers_dev": false,
+
+  // Workers for Platforms dispatch namespace
+  // The namespace will be auto-created by the setup script
+  "dispatch_namespaces": [
+    {
+      "binding": "dispatcher",
+      "namespace": "workers-platform-template",
+      "remote": true
+    }
+  ],
+
+  // D1 Database for storing project metadata
+  // The database will be auto-provisioned during deployment
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "workers-platform-template",
+      "database_id": "placeholder-will-be-auto-provisioned"
+    }
+  ],
+
+  "vars": {
+    // Dispatch namespace name - must match the namespace above
+    "DISPATCH_NAMESPACE_NAME": "workers-platform-template",
+    // Optional: Your platform's custom domain (e.g., "myplatform.com"). Leave empty to use workers.dev
+    "CUSTOM_DOMAIN": "",
+
+    // FALLBACK_ORIGIN, CLOUDFLARE_ZONE_ID, ACCOUNT_ID, and
+    // DISPATCH_NAMESPACE_API_TOKEN are auto-configured by the setup script
+    "DISPATCH_NAMESPACE_API_TOKEN": "",
+    "CLOUDFLARE_ACCOUNT_ID": "",
+    "CLOUDFLARE_ZONE_ID": "",
+    "CLOUDFLARE_API_TOKEN": "",
+    "FALLBACK_ORIGIN": "",
+    "WORKERS_DEV_SUBDOMAIN": ""
+  }
+}

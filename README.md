@@ -23,9 +23,9 @@ Click the **Deploy to Cloudflare** button above. Everything is auto-configured!
 
 If you want to use your own domain instead of `*.workers.dev`:
 
-| Variable | Description |
-|----------|-------------|
-| `CUSTOM_DOMAIN` | Your root domain (e.g., `platform.com`) |
+| Variable               | Description                                           |
+| ---------------------- | ----------------------------------------------------- |
+| `CUSTOM_DOMAIN`        | Your root domain (e.g., `platform.com`)               |
 | `CLOUDFLARE_API_TOKEN` | (Optional) API token with SSL permissions - see below |
 
 #### API Token for Custom Domains
@@ -84,11 +84,12 @@ npm run deploy
 ```
 
 The setup script will:
+
 - Validate your Cloudflare credentials
 - Create the dispatch namespace for Workers for Platforms
 - Auto-create API tokens with correct permissions (if needed)
-- Generate `.dev.vars` with all required configuration
-- Update `wrangler.toml` with your settings
+- Generate `.env` with all required configuration
+- Update `wrangler.jsonc` with your settings
 
 ---
 
@@ -96,10 +97,16 @@ The setup script will:
 
 To use your own domain instead of `*.workers.dev`:
 
-### 1. Update `wrangler.toml`
+### 1. Update `wrangler.jsonc`
 
-```toml
-[vars]
+```jsonc
+{
+  "vars": {
+    "CUSTOM_DOMAIN": "platform.com",
+    "CLOUDFLARE_ZONE_ID": "your-zone-id-here",
+    "FALLBACK_ORIGIN": "my.platform.com"
+  }
+}
 CUSTOM_DOMAIN = "platform.com"
 CLOUDFLARE_ZONE_ID = "your-zone-id-here"
 FALLBACK_ORIGIN = "my.platform.com"
@@ -115,10 +122,10 @@ workers_dev = false
 
 In your Cloudflare DNS settings for `platform.com`:
 
-| Type | Name | Content | Result | Proxy |
-|------|------|---------|--------|-------|
-| A | `*` | `192.0.2.1` | `*.platform.com` | Proxied |
-| A | `my` | `192.0.2.1` | `my.platform.com` | Proxied |
+| Type | Name | Content     | Result            | Proxy   |
+| ---- | ---- | ----------- | ----------------- | ------- |
+| A    | `*`  | `192.0.2.1` | `*.platform.com`  | Proxied |
+| A    | `my` | `192.0.2.1` | `my.platform.com` | Proxied |
 
 > **Note:** The root domain (`platform.com`) is automatically configured when you add a custom domain to your Worker in the Cloudflare dashboard. The `192.0.2.1` is a dummy IP - Cloudflare's proxy handles the actual routing.
 
@@ -152,15 +159,16 @@ The admin page (`/admin`) shows all projects. Protect it with [Cloudflare Access
 
 ## Troubleshooting
 
-| Problem | Solution |
-|---------|----------|
-| "Dispatch namespace not found" | Enable Workers for Platforms: [dash.cloudflare.com/?to=/:account/workers-for-platforms](https://dash.cloudflare.com/?to=/:account/workers-for-platforms) |
-| "Custom domain not working" | Check Zone ID and DNS records are correct |
-| "Custom hostnames require additional setup" | Provide `CLOUDFLARE_API_TOKEN` with SSL permissions during deploy, or add it post-deploy as a secret |
-| "404 on deployed sites" | Ensure uploaded files include `index.html` at the root |
-| Database errors | Visit `/admin` to check status, or `/init` to reset |
+| Problem                                     | Solution                                                                                                                                                 |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "Dispatch namespace not found"              | Enable Workers for Platforms: [dash.cloudflare.com/?to=/:account/workers-for-platforms](https://dash.cloudflare.com/?to=/:account/workers-for-platforms) |
+| "Custom domain not working"                 | Check Zone ID and DNS records are correct                                                                                                                |
+| "Custom hostnames require additional setup" | Provide `CLOUDFLARE_API_TOKEN` with SSL permissions during deploy, or add it post-deploy as a secret                                                     |
+| "404 on deployed sites"                     | Ensure uploaded files include `index.html` at the root                                                                                                   |
+| Database errors                             | Visit `/admin` to check status, or `/init` to reset                                                                                                      |
 
 **View logs:**
+
 ```bash
 npx wrangler tail
 ```

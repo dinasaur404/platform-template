@@ -1,19 +1,22 @@
 // Copyright (c) 2022 Cloudflare, Inc.
 // Licensed under the APACHE LICENSE, VERSION 2.0 license found in the LICENSE file or at http://www.apache.org/licenses/LICENSE-2.0
 
-import { ResourceValues } from './types';
-
-function ResourceValueToString(value: ResourceValues, columnName?: string) {
+function ResourceValueToString(
+  value: string | number | boolean | null,
+  columnName?: string
+) {
   if (value == null) return 'null';
-  
+
   const stringValue = value.toString();
-  
+
   // Special handling for script_content column
   if (columnName === 'script_content' && stringValue.length > 100) {
-    const truncated = stringValue.substring(0, 100) + '...';
-    return `<div class="script-preview" title="${escapeHtml(stringValue)}">${escapeHtml(truncated)}</div>`;
+    const truncated = `${stringValue.substring(0, 100)}...`;
+    return `<div class="script-preview" title="${escapeHtml(
+      stringValue
+    )}">${escapeHtml(truncated)}</div>`;
   }
-  
+
   // HTML escape all content to prevent rendering issues
   return escapeHtml(stringValue);
 }
@@ -27,16 +30,28 @@ function escapeHtml(text: string): string {
     .replace(/'/g, '&#39;');
 }
 
-export function BuildTable(name: string, dataRows: Record<string, string | number | boolean | null>[] | undefined): string {
+export function BuildTable(
+  name: string,
+  dataRows: Record<string, string | number | boolean | null>[] | undefined
+): string {
   if (!dataRows?.length) {
-    return `<div class="dataContainer"><h3>${escapeHtml(name)}</h3><p style="color: var(--kumo-muted-foreground);">No data</p></div>`;
+    return `<div class="dataContainer"><h3>${escapeHtml(
+      name
+    )}</h3><p style="color: var(--kumo-muted-foreground);">No data</p></div>`;
   }
   const columns = Object.keys(dataRows[0]);
-  const headerRow = `<tr>${columns.map((col) => `<th>${escapeHtml(col)}</th>`).join('')}</tr>`;
-  const dataRowsHtml = dataRows.map((row) => 
-    `<tr>${columns.map((col) => `<td>${ResourceValueToString(row[col], col)}</td>`).join('')}</tr>`
-  ).join('');
-  
+  const headerRow = `<tr>${columns
+    .map((col) => `<th>${escapeHtml(col)}</th>`)
+    .join('')}</tr>`;
+  const dataRowsHtml = dataRows
+    .map(
+      (row) =>
+        `<tr>${columns
+          .map((col) => `<td>${ResourceValueToString(row[col], col)}</td>`)
+          .join('')}</tr>`
+    )
+    .join('');
+
   const table = `<table class="dataTable">${headerRow}${dataRowsHtml}</table>`;
   return `<div class="dataContainer">${table}</div>`;
 }
@@ -1179,7 +1194,10 @@ hr.solid {
 }
 `;
 
-export const renderPage = (body: string, options?: { customDomain?: string }) => `
+export const renderPage = (
+  body: string,
+  options?: { customDomain?: string }
+) => `
 <!DOCTYPE html><html>
 <head>
   <title>Build a Website</title>
@@ -1198,7 +1216,6 @@ ${body}
 </body>
 </html>
 `;
-
 
 export const BuildWebsitePage = `
 <div class="form-container">
