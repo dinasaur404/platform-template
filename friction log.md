@@ -1,0 +1,7 @@
+- if there isn't a .env, then wrangler types doesn't figure it out
+  - maybe we should read from .env.example as well?
+- all these vars and secrets, bleh
+  - how do you do optional vars and make it work with typegen?
+  - should we have a platforms binding?
+  - should we be able to use the oauth token from inside a worker for local dev
+- need type safety with db/query builder
