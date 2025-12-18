@@ -26,23 +26,6 @@ If you want to use your own domain instead of `*.workers.dev`:
 | Variable | Description |
 |----------|-------------|
 | `CUSTOM_DOMAIN` | Your root domain (e.g., `platform.com`) |
-| `CLOUDFLARE_API_TOKEN` | (Optional) API token with SSL permissions - see below |
-
-#### API Token for Custom Domains
-
-To enable **custom hostname support** (letting users connect their own domains), create an API token with SSL permissions. The default deploy token doesn't include these.
-
-1. Go to [API Tokens](https://dash.cloudflare.com/profile/api-tokens)
-2. Click **Create Token**
-3. Use **Custom token** template
-4. Add permissions:
-   - **Zone** → **SSL and Certificates** → **Edit**
-   - **Zone** → **Zone** → **Read**
-5. Set **Zone Resources** to your domain
-6. Create and copy the token
-7. Paste it in the `CLOUDFLARE_API_TOKEN` field during deployment
-
-> **Note:** If you skip this, everything else works - you just won't be able to provision custom hostnames for users automatically.
 
 ---
 
